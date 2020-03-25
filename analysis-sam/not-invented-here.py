@@ -167,9 +167,12 @@ def load_signal_data(data_type, config, subject='sam', recording=0, remove_refer
     _t = data['timestamps'].reshape(-1)
     _t -= _t[0]
 
-    return pd.DataFrame(data=data['signals'], 
-                        index=pd.TimedeltaIndex(_t, unit='s'),
-                        columns=data['ch_names']).drop(columns=config['columns_to_remove'])
+    signal = pd.DataFrame(data=data['signals'], 
+                          index=pd.TimedeltaIndex(_t, unit='s'), 
+                          columns=data['ch_names'])\
+               .drop(columns=config['columns_to_remove'])
+    
+    return signal.loc[signal.index[config['default_signal_crop']], :]
 
 # <markdowncell>
 
@@ -215,6 +218,8 @@ def plot_raw_signal(signal_pd, sampling=10):
 
     axs[-1].set_xlabel('time [ms]')
     axs[-1].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, d.index)))
+    
+    fig.suptitle("Raw signal recording")
     
     return fig
 
@@ -263,6 +268,7 @@ cfg = {
     'columns_to_remove': [
         'TRIGGER', 'X1', 'X2', 'X3',
     ],
+    'default_signal_crop': np.s_[3000:-3000], # this corresponds to ~1 second at the beginning and end, given by the sampling frequency
     'sampling_frequency': 300,
     'bands': {
         'gamma': [40, 100],
@@ -276,6 +282,7 @@ cfg = {
 # <codecell>
 
 meditation_pd = load_signal_data('meditation', config=cfg)
+baseline_pd = load_signal_data('baseline', config=cfg)
 
 # <codecell>
 
@@ -283,7 +290,12 @@ electrode_of_interest = 'O2'
 
 # <codecell>
 
-meditation_bandpower  = get_bandpower_for_electrode(meditation_pd, electrode=electrode_of_interest, config=cfg)
+meditation_bandpower = get_bandpower_for_electrode(meditation_pd, electrode=electrode_of_interest, config=cfg)
+baseline_bandpower   = get_bandpower_for_electrode(baseline_pd, electrode=electrode_of_interest, config=cfg)
+
+# <codecell>
+
+plot_raw_signal(baseline_pd);
 
 # <codecell>
 
@@ -292,6 +304,36 @@ plot_raw_signal(meditation_pd);
 # <codecell>
 
 plot_bandpowers(meditation_bandpower, electrode=electrode_of_interest);
+
+# <codecell>
+
+plot_bandpowers(baseline_bandpower, electrode=electrode_of_interest);
+
+# <codecell>
+
+baseline_bandpower['gamma'].agg(['mean', 'min', 'max', 'median'])
+
+# <codecell>
+
+
+
+# <codecell>
+
+aggregated_fns = ['mean', 'min', 'max', 'median']
+aggregated_power = pd.DataFrame(index=pd.MultiIndex.from_product([list(baseline_bandpower.keys()), ['baseline', 'meditation']]),
+                                columns=aggregated_fns)
+
+for band, power in baseline_bandpower.items():
+    aggregated_power.loc[(band, "baseline"), :] = power.agg(aggregated_fns)
+    
+
+for band, power in meditation_bandpower.items():
+    aggregated_power.loc[(band, 'meditation'), :] = power.agg(aggregated_fns)
+    
+
+# <codecell>
+
+aggregated_power
 
 # <markdowncell>
 
