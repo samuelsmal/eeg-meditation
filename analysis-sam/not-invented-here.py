@@ -99,7 +99,110 @@ def bandpower(data, sf, band, method='welch', window_sec=None, relative=False):
 
 # <codecell>
 
+def load_signal_data(data_type, subject='sam', recording=0):
+    """loads the data and returns a pandas dataframe 
+    
+    Parameters
+    ----------
+    data_type : string
+      type of the data, right now two options are valid: `baseline` or `meditation`
+    subject: string
+      name of the subject
+    recording: int
+      number of recording, if you have multiple of same type and subject
+      
+    Returns
+    -------
+    a pandas dataframe, timedeltaindexed of the raw signals
+    """
+    subject_paths = get_config_value(cfg, 'paths', 'subjects', subject)
+    data = pd.read_pickle(f"{cfg['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[recording]}-raw.pcl")
+    
+    _t = data['timestamps'].reshape(-1)
+    _t -= _t[0]
+
+    return pd.DataFrame(data=data['signals'], 
+                        index=pd.TimedeltaIndex(_t, unit='s'),
+                        columns=data['ch_names'])
+
+
+def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'):
+    """Calculates the bandpower for the given electrode
+    
+    Note that this will take some time... I suggest that you only use a part of the signal to try it out.
+    
+    Parameters
+    ----------
+    signal_data: 2d pandas dataframe
+        raw signal data, indexed by a timedeltaindex (or any other time-based index)
+    electrode: string
+        name of the electrode of interest
+    config: dict
+        dict of config parameters
+    window_size: string
+        size of rolling window
+        
+    Returns
+    -------
+    a new pandas dataframe of the bandpowers, in addition all ration combinations are listed as well
+    """
+    bandpowers = {}
+
+    for band_name, band_range in config['bands'].items():
+        bandpowers[band_name] = signal_data.loc[:, electrode]\
+            .rolling(window_size)\
+            .apply(lambda xs: bandpower(xs, config['sampling_frequency'], band_range))
+
+    # compute all different ratios
+    for bn_l, bn_r in combinations(cfg['bands'].keys(), 2):
+        bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
+        
+    return bandpowers 
+
+
+def plot_bandpowers(bandpowers, electrode):
+    fig, axs = plt.subplots(nrows=len(bandpowers), sharex=True, figsize=(25, 15))
+    time_index = list(bandpowers.values())[0].index
+    time_index_as_seconds = [t.total_seconds() for t in time_index]
+
+    for i, (bn, bp) in enumerate(bandpowers.items()):
+        axs[i].plot(bp.reset_index(drop=True))
+        axs[i].set_ylabel(bn)
+
+    axs[0].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, time_index)))
+    fig.suptitle(f"Bandpower of {electrode}")
+    
+    return fig
+
+
+def plot_raw_signal(signal_pd, slice_obj=np.s_[::10]):
+    """
+    Parameters
+    ----------
+    signal_pd: 2d data, long-format (a column for each electrode)
+    slice_obj: us this to modify the elements being plotted
+    
+    Returns
+    -------
+    a figure of the plot
+    
+    """
+    
+    fig, axs = plt.subplots(nrows=signal_pd.shape[1], figsize=(40, 1.4 * signal_pd.shape[1]), sharex=True)
+    for channel_id, channel in enumerate(signal_pd.columns):
+        d = signal_pd.loc[slice_obj, channel]
+        sns.lineplot(data=d.reset_index(drop=True), ax=axs[channel_id])
+        axs[channel_id].set_xlabel(channel)
+
+    axs[-1].set_xlabel('time [ms]')
+    axs[-1].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, d.index)))
+    
+    return fig
+
+# <codecell>
+
 def index_to_time(x, time_index, step_size=1):
+    """Helper function to add the axis labels"""
     if (x < 0 or x * step_size >= len(time_index)):
         return ''
     
@@ -109,6 +212,7 @@ def index_to_time(x, time_index, step_size=1):
 # <codecell>
 
 def get_config_value(config, *args):
+    """Helper to get read the config"""
     return reduce(lambda cfg, val: cfg[val], args, config)
 
 # <markdowncell>
@@ -116,6 +220,8 @@ def get_config_value(config, *args):
 # # main stuff
 
 # <codecell>
+
+# This is the config. Add any value that you deem necessary. This should contain everything that belongs to the setup, the filtering pipeline, etc.
 
 cfg = {
     'paths': {
@@ -147,115 +253,35 @@ cfg = {
 
 # <codecell>
 
-subject_paths = get_config_value(cfg, 'paths', 'subjects', 'sam')
-
-baseline = pd.read_pickle(f"{cfg['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', 'baseline')[0]}-raw.pcl")
-meditation =  pd.read_pickle(f"{cfg['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', 'meditation')[0]}-raw.pcl")
-
-# <codecell>
-
-def load_signal_data(data_type, subject='sam', number=0):
-    subject_paths = get_config_value(cfg, 'paths', 'subjects', subject)
-    data = pd.read_pickle(f"{cfg['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[0]}-raw.pcl")
-    
-    _t = data['timestamps'].reshape(-1)
-    _t -= _t[0]
-
-    return pd.DataFrame(data=data['signals'],
-                              index=pd.TimedeltaIndex(_t, unit='s'), 
-                              columns=data['ch_names'])
-
-# <codecell>
-
 meditation_pd = load_signal_data('meditation')
 
 # <codecell>
 
-# adjusting the timestmaps, I prefer relative values
-_t = baseline['timestamps'].reshape(-1)
-_t -= _t[0]
-
-signals_pd = pd.DataFrame(data=baseline['signals'],
-                          index=pd.TimedeltaIndex(_t, unit='s'), 
-                          columns=baseline['ch_names'])
+electrode_of_interest = 'T5'
 
 # <codecell>
 
-_sampling_rate=10
-fig = signals_pd.loc[::_sampling_rate, :].plot(figsize=(40, 20), use_index=True)
-
-
-fig.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, signals_pd.index, _sampling_rate)))
-fig.set_xlabel('time [s]')
-fig.set_ylabel('voltage')
-fig.set_title('raw measurements of voltage for each electrode');
+meditation_bandpower  = get_bandpower_for_electrode(meditation_pd, electrode=electrode_of_interest, config=cfg)
 
 # <codecell>
 
-signals_pd.columns
+meditation_pd
 
 # <codecell>
 
-signals_pd.shape
+plot_raw_signal(meditation_pd);
 
 # <codecell>
 
-def get_bandpower_for_electrode(signal_data, electrode='T5'):
-    time_index_of_interest = signal_data.index
-
-    bandpowers = {}
-
-    for band_name, band_range in cfg['bands'].items():
-        bandpowers[band_name] = signal_data.loc[time_index_of_interest, electrode_placement]\
-            .rolling('1s')\
-            .apply(lambda xs: bandpower(xs, cfg['sampling_frequency'], band_range))
-
-    for bn_l, bn_r in combinations(cfg['bands'].keys(), 2):
-        bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
-        
-    return bandpowers, time_index_of_interest
+plot_bandpowers(meditation_bandpower, electrode=electrode_of_interest);
 
 # <codecell>
 
-def plot_bandpowers(bandpowers, time_index_of_interest):
-    fig, axs = plt.subplots(nrows=len(bandpowers), sharex=True, figsize=(25, 15))
-    time_index_as_seconds = [t.total_seconds() for t in time_index_of_interest]
-
-    for i, (bn, bp) in enumerate(bandpowers.items()):
-        axs[i].plot(bp.reset_index(drop=True))
-        axs[i].set_ylabel(bn)
-
-    axs[0].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, time_index_of_interest)))
-    fig.suptitle(f"Bandpower of {electrode_placement}")
+fig, axs = plt.subplots(nrows=meditation_pd.shape[1], figsize=(40, 1.4 * meditation_pd.shape[1]))
+for channel_id, channel in enumerate(meditation_pd.columns):
+    sns.lineplot(data=meditation_pd.loc[::10, channel], ax=axs[channel])
     
-    return fig
-
-# <codecell>
-
-meditation_bandpower, meditation_time_index = get_bandpower_for_electrode(meditation_pd)
-
-# <codecell>
-
-plot_bandpowers_bandpowers(meditation_bandpower, meditation_time_index);
-
-# <codecell>
-
-# TODO what type of window? this is just a window with equal weight
-# the thing with the index
-electrode_placement = 'T5'
-
-#time_index_of_interest = signals_pd.index[:5 * cfg['sampling_frequency']]
-time_index_of_interest = signals_pd.index
-
-bandpowers = {}
-    
-for band_name, band_range in cfg['bands'].items():
-    bandpowers[band_name] = signals_pd.loc[time_index_of_interest, electrode_placement]\
-        .rolling('1s')\
-        .apply(lambda xs: bandpower(xs, cfg['sampling_frequency'], band_range))
-    
-for bn_l, bn_r in combinations(cfg['bands'].keys(), 2):
-    bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
+axs[-1].set_xlabel('time [ms]');
 
 # <codecell>
 

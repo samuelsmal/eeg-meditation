@@ -9,14 +9,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import mne
 #%matplotlib inline
+#%matplotlib qt
 
 # <codecell>
 
-
-
-# <codecell>
-
-raw = mne.io.read_raw_fif('./sam-AlphaTheta/offline/fif/20200304-144100-raw.fif')
+raw = mne.io.read_raw_fif('../../data/AlphaTheta/sam-AlphaTheta/offline/fif/20200304-144100-raw.fif')
 
 # <codecell>
 
@@ -29,10 +26,6 @@ events = mne.find_events(raw, initial_event=True, consecutive=True)
 # <codecell>
 
 raw.plot_psd(fmax=50);
-
-# <codecell>
-
-raw.plot_sensors()
 
 # <codecell>
 
