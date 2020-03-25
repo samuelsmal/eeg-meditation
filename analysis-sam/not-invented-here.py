@@ -136,8 +136,22 @@ def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'
         
     return bandpowers 
 
+# <codecell>
+
+def aggregate_bandpower(baseline, signal):
+    aggregated_fns = ['mean', 'median', 'min', 'max']
+    aggregated_power = pd.DataFrame(index=pd.MultiIndex.from_product([list(baseline.keys()), ['baseline', 'meditation']]),
+                                    columns=aggregated_fns)
+
+    for band, power in baseline.items():
+        aggregated_power.loc[(band, "baseline"), :] = power.agg(aggregated_fns)
 
 
+    for band, power in signal.items():
+        aggregated_power.loc[(band, 'meditation'), :] = power.agg(aggregated_fns)
+
+
+    return aggregated_power
 
 # <markdowncell>
 
@@ -262,6 +276,17 @@ cfg = {
                          '20200304-144933'   
                     ]
                 }
+            },
+            'adelie': {
+                'prefix': '/adelie-AlphaTheta',
+                'recordings': {
+                    'baseline': [
+                        '20200304-151358',
+                    ],
+                    'meditation': [
+                        '20200304-152058',
+                    ]
+                }
             }
         }
     },
@@ -286,12 +311,24 @@ baseline_pd = load_signal_data('baseline', config=cfg)
 
 # <codecell>
 
+baseline_adelie_pd = load_signal_data('baseline', subject='adelie', config=cfg)
+meditation_adelie_pd = load_signal_data('meditation', subject='adelie', config=cfg)
+
+# <codecell>
+
 electrode_of_interest = 'O2'
 
 # <codecell>
 
 meditation_bandpower = get_bandpower_for_electrode(meditation_pd, electrode=electrode_of_interest, config=cfg)
 baseline_bandpower   = get_bandpower_for_electrode(baseline_pd, electrode=electrode_of_interest, config=cfg)
+
+# <codecell>
+
+bandpower_adelie = {
+    'baseline': get_bandpower_for_electrode(baseline_adelie_pd, electrode=electrode_of_interest, config=cfg),
+    'meditation': get_bandpower_for_electrode(meditation_adelie_pd, electrode=electrode_of_interest, config=cfg)
+}
 
 # <codecell>
 
@@ -303,15 +340,11 @@ plot_raw_signal(meditation_pd);
 
 # <codecell>
 
-plot_bandpowers(meditation_bandpower, electrode=electrode_of_interest);
-
-# <codecell>
-
 plot_bandpowers(baseline_bandpower, electrode=electrode_of_interest);
 
 # <codecell>
 
-baseline_bandpower['gamma'].agg(['mean', 'min', 'max', 'median'])
+plot_bandpowers(meditation_bandpower, electrode=electrode_of_interest);
 
 # <codecell>
 
@@ -319,21 +352,13 @@ baseline_bandpower['gamma'].agg(['mean', 'min', 'max', 'median'])
 
 # <codecell>
 
-aggregated_fns = ['mean', 'min', 'max', 'median']
-aggregated_power = pd.DataFrame(index=pd.MultiIndex.from_product([list(baseline_bandpower.keys()), ['baseline', 'meditation']]),
-                                columns=aggregated_fns)
-
-for band, power in baseline_bandpower.items():
-    aggregated_power.loc[(band, "baseline"), :] = power.agg(aggregated_fns)
-    
-
-for band, power in meditation_bandpower.items():
-    aggregated_power.loc[(band, 'meditation'), :] = power.agg(aggregated_fns)
-    
+aggregated_power_adelie = aggregate_bandpower(baseline=bandpower_adelie['baseline'], signal=bandpower_adelie['meditation'])
+aggregated_power_adelie
 
 # <codecell>
 
-aggregated_power
+aggregated_power_sam = aggregate_bandpower(baseline=baseline_bandpower, signal=meditation_bandpower)
+aggregated_power_sam
 
 # <markdowncell>
 
