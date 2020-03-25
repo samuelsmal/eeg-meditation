@@ -28,6 +28,10 @@ from itertools import combinations
 
 # ## helper functions
 
+# <markdowncell>
+
+# ### computation
+
 # <codecell>
 
 def bandpower(data, sf, band, method='welch', window_sec=None, relative=False):
@@ -99,33 +103,6 @@ def bandpower(data, sf, band, method='welch', window_sec=None, relative=False):
 
 # <codecell>
 
-def load_signal_data(data_type, subject='sam', recording=0):
-    """loads the data and returns a pandas dataframe 
-    
-    Parameters
-    ----------
-    data_type : string
-      type of the data, right now two options are valid: `baseline` or `meditation`
-    subject: string
-      name of the subject
-    recording: int
-      number of recording, if you have multiple of same type and subject
-      
-    Returns
-    -------
-    a pandas dataframe, timedeltaindexed of the raw signals
-    """
-    subject_paths = get_config_value(cfg, 'paths', 'subjects', subject)
-    data = pd.read_pickle(f"{cfg['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[recording]}-raw.pcl")
-    
-    _t = data['timestamps'].reshape(-1)
-    _t -= _t[0]
-
-    return pd.DataFrame(data=data['signals'], 
-                        index=pd.TimedeltaIndex(_t, unit='s'),
-                        columns=data['ch_names'])
-
-
 def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'):
     """Calculates the bandpower for the given electrode
     
@@ -160,6 +137,46 @@ def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'
     return bandpowers 
 
 
+
+
+# <markdowncell>
+
+# ### data loading
+
+# <codecell>
+
+def load_signal_data(data_type, config, subject='sam', recording=0, remove_references=True):
+    """loads the data and returns a pandas dataframe 
+    
+    Parameters
+    ----------
+    data_type : string
+      type of the data, right now two options are valid: `baseline` or `meditation`
+    subject: string
+      name of the subject
+    recording: int
+      number of recording, if you have multiple of same type and subject
+      
+    Returns
+    -------
+    a pandas dataframe, timedeltaindexed of the raw signals
+    """
+    subject_paths = get_config_value(config, 'paths', 'subjects', subject)
+    data = pd.read_pickle(f"{config['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[recording]}-raw.pcl")
+    
+    _t = data['timestamps'].reshape(-1)
+    _t -= _t[0]
+
+    return pd.DataFrame(data=data['signals'], 
+                        index=pd.TimedeltaIndex(_t, unit='s'),
+                        columns=data['ch_names']).drop(columns=config['columns_to_remove'])
+
+# <markdowncell>
+
+# ### plots
+
+# <codecell>
+
 def plot_bandpowers(bandpowers, electrode):
     fig, axs = plt.subplots(nrows=len(bandpowers), sharex=True, figsize=(25, 15))
     time_index = list(bandpowers.values())[0].index
@@ -175,12 +192,14 @@ def plot_bandpowers(bandpowers, electrode):
     return fig
 
 
-def plot_raw_signal(signal_pd, slice_obj=np.s_[::10]):
+def plot_raw_signal(signal_pd, sampling=10):
     """
     Parameters
     ----------
-    signal_pd: 2d data, long-format (a column for each electrode)
-    slice_obj: us this to modify the elements being plotted
+    signal_pd: 2d pandas dataframe
+        long-format (a column for each electrode)
+    sampling: int
+        step size of data points used for plotting
     
     Returns
     -------
@@ -190,9 +209,9 @@ def plot_raw_signal(signal_pd, slice_obj=np.s_[::10]):
     
     fig, axs = plt.subplots(nrows=signal_pd.shape[1], figsize=(40, 1.4 * signal_pd.shape[1]), sharex=True)
     for channel_id, channel in enumerate(signal_pd.columns):
-        d = signal_pd.loc[slice_obj, channel]
+        d = signal_pd.loc[::sampling, channel]
         sns.lineplot(data=d.reset_index(drop=True), ax=axs[channel_id])
-        axs[channel_id].set_xlabel(channel)
+        axs[channel_id].set_ylabel(channel)
 
     axs[-1].set_xlabel('time [ms]')
     axs[-1].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, d.index)))
@@ -241,6 +260,9 @@ cfg = {
             }
         }
     },
+    'columns_to_remove': [
+        'TRIGGER', 'X1', 'X2', 'X3',
+    ],
     'sampling_frequency': 300,
     'bands': {
         'gamma': [40, 100],
@@ -253,19 +275,15 @@ cfg = {
 
 # <codecell>
 
-meditation_pd = load_signal_data('meditation')
+meditation_pd = load_signal_data('meditation', config=cfg)
 
 # <codecell>
 
-electrode_of_interest = 'T5'
+electrode_of_interest = 'O2'
 
 # <codecell>
 
 meditation_bandpower  = get_bandpower_for_electrode(meditation_pd, electrode=electrode_of_interest, config=cfg)
-
-# <codecell>
-
-meditation_pd
 
 # <codecell>
 
@@ -275,25 +293,9 @@ plot_raw_signal(meditation_pd);
 
 plot_bandpowers(meditation_bandpower, electrode=electrode_of_interest);
 
-# <codecell>
+# <markdowncell>
 
-fig, axs = plt.subplots(nrows=meditation_pd.shape[1], figsize=(40, 1.4 * meditation_pd.shape[1]))
-for channel_id, channel in enumerate(meditation_pd.columns):
-    sns.lineplot(data=meditation_pd.loc[::10, channel], ax=axs[channel])
-    
-axs[-1].set_xlabel('time [ms]');
-
-# <codecell>
-
-fig, axs = plt.subplots(nrows=len(bandpowers), sharex=True, figsize=(25, 15))
-time_index_as_seconds = [t.total_seconds() for t in time_index_of_interest]
-
-for i, (bn, bp) in enumerate(bandpowers.items()):
-    axs[i].plot(bp.reset_index(drop=True))
-    axs[i].set_ylabel(bn)
-    
-axs[0].xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: index_to_time(x, time_index_of_interest)))
-fig.suptitle(f"Bandpower of {electrode_placement}");
+# # Graveyard, not interesting below here
 
 # <codecell>
 
