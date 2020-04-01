@@ -21,8 +21,15 @@ import matplotlib.ticker as ticker
 from functional import seq
 from scipy import signal
 from itertools import combinations 
+import mne
 
-#%matplotlib inline
+#%matplotlib qt 
+
+# <codecell>
+
+if [int(i) for i in mne.__version__.split('.')] < [0, 20, 0]:
+    print('should be at least 0.20.0')
+    stop # this is the best hack, it clearly does what it is supposed to do
 
 # <markdowncell>
 
@@ -188,6 +195,60 @@ def load_signal_data(data_type, config, subject='sam', recording=0, remove_refer
     
     return signal.loc[signal.index[config['default_signal_crop']], :]
 
+# <codecell>
+
+def get_channelsList(config, subject='adelie'):
+    subject_paths = get_config_value(config, 'paths', 'subjects', subject)
+    base_path = get_config_value(config, 'paths', 'base')
+    file_path = f"{base_path}/{subject_paths['prefix']}/offline/fif/{get_config_value(config, 'paths', 'channels_file')}"
+    
+    with open(file_path, 'r') as channels_file:
+        all_channels = channels_file.read().strip()
+        
+    return [channel for channel in all_channels.split('\n') if channel not in config['columns_to_remove']]
+
+def load_raw_mne_from_fif(data_type, config, subject='adelie', recording=0, montage='standard_1020'):
+    """loads the data and returns an instance of mne.Raw
+    
+    Parameters
+    ----------
+    data_type : string
+      type of the data, right now two options are valid: `baseline` or `meditation`
+    subject: string
+      name of the subject
+    recording: int
+      number of recording, if you have multiple of same type and subject
+    montage: string
+      the type of montage that was used for the recording see: https://mne.tools/dev/generated/mne.channels.make_standard_montage.html
+      
+    Returns
+    -------
+    a mne.Raw instance that has the correct montage and info and is ready to be plotted
+    """
+    subject_paths = get_config_value(config, 'paths', 'subjects', subject)
+    base_path = get_config_value(config, 'paths', 'base')
+    recording_id = get_config_value(subject_paths, 'recordings', data_type)[recording]
+    file_path = f"{base_path}{subject_paths['prefix']}/offline/fif/{recording_id}-raw.fif"
+    
+    # Create a digitization of the montage
+    digitization = mne.channels.make_standard_montage(montage)
+    channels = get_channelsList(config, subject=subject)
+    
+    # Read from fif file
+    raw = mne.io.read_raw_fif(file_path, preload=True)
+    
+    # Create info with some useful information
+    info = mne.create_info(channels, sfreq=config['sampling_frequency'], ch_types='eeg')
+    raw.info = info
+    
+    # set the montage
+    raw.set_montage(digitization)
+    
+    raw = raw.pick_types(eeg=True, stim=False)
+    raw.set_eeg_reference(projection=True).apply_proj()
+    
+    return raw
+
 # <markdowncell>
 
 # ### plots
@@ -264,6 +325,7 @@ def get_config_value(config, *args):
 cfg = {
     'paths': {
         'base': '../../data/AlphaTheta',
+        'channels_file': 'channelsList.txt',
         'subjects': {
             'sam': {
                 'prefix': '/sam-AlphaTheta',
@@ -293,6 +355,7 @@ cfg = {
     'columns_to_remove': [
         'TRIGGER', 'X1', 'X2', 'X3',
     ],
+    'reference_electrode': 'A2',
     'default_signal_crop': np.s_[3000:-3000], # this corresponds to ~1 second at the beginning and end, given by the sampling frequency
     'sampling_frequency': 300,
     'bands': {
@@ -303,6 +366,10 @@ cfg = {
         'delta': [0.5, 4]
     }
 }
+
+# <markdowncell>
+
+# ## basic
 
 # <codecell>
 
@@ -359,6 +426,174 @@ aggregated_power_adelie
 
 aggregated_power_sam = aggregate_bandpower(baseline=baseline_bandpower, signal=meditation_bandpower)
 aggregated_power_sam
+
+# <markdowncell>
+
+# ## spectrogram videos
+
+# <codecell>
+
+ls ../../data/AlphaTheta/sam-AlphaTheta/offline/fif
+
+# <codecell>
+
+fif_meditation = load_raw_mne_from_fif('meditation', subject='sam', config=cfg)
+
+# <codecell>
+
+meditation_csd = mne.preprocessing.compute_current_source_density(fif_meditation)
+
+# <codecell>
+
+meditation_csd.plot(scalings='auto')
+meditation_csd.plot_psd()
+
+# <codecell>
+
+def load_raw_mne_from_fif(data_type, config, subject='adelie', recording=0, montage='standard_1020'):
+    """loads the data and returns an instance of mne.Raw
+    
+    Parameters
+    ----------
+    data_type : string
+      type of the data, right now two options are valid: `baseline` or `meditation`
+    subject: string
+      name of the subject
+    recording: int
+      number of recording, if you have multiple of same type and subject
+    montage: string
+      the type of montage that was used for the recording see: https://mne.tools/dev/generated/mne.channels.make_standard_montage.html
+      
+    Returns
+    -------
+    a mne.Raw instance that has the correct montage and info and is ready to be plotted
+    """
+    subject_paths = get_config_value(config, 'paths', 'subjects', subject)
+    base_path = get_config_value(config, 'paths', 'base')
+    recording_id = get_config_value(subject_paths, 'recordings', data_type)[recording]
+    file_path = f"{base_path}{subject_paths['prefix']}/offline/fif/{recording_id}-raw.fif"
+    
+    # Create a digitization of the montage
+    digitization = mne.channels.make_standard_montage(montage)
+    channels = get_channelsList(config, subject=subject)
+    
+    # Read from fif file
+    raw = mne.io.read_raw_fif(file_path, preload=True)
+    
+    # I hope that this is correct
+    raw, _ = mne.set_eeg_reference(raw, [config['reference_electrode']])
+    
+    # finding events
+    events = mne.find_events(raw, stim_channel='TRIGGER')
+    
+    # Create info with some useful information
+    raw.info = mne.create_info(channels, sfreq=config['sampling_frequency'], ch_types='eeg')
+    # set the montage
+    raw.set_montage(digitization)
+    
+    raw = raw.pick_types(eeg=True, stim=False)
+    raw.set_eeg_reference(projection=True).apply_proj()
+    
+    return raw, events
+
+# <codecell>
+
+def raw_to_epochs(raw, events, sampling_frequency, weird_epoch_offset=100):
+    return mne.Epochs(raw=raw, events=events, tmax=events[-1, 0] * 1 / sampling_frequency - weird_epoch_offset).average()
+
+# <codecell>
+
+signals_meditation, events_meditation = load_raw_mne_from_fif('meditation', subject='sam', config=cfg)
+signals_baseline, events_baseline = load_raw_mne_from_fif('baseline', subject='sam', config=cfg)
+
+# <codecell>
+
+signals_baseline.plot_sensors(show_names=True)
+
+# <codecell>
+
+epochs_meditation = raw_to_epochs(raw=signals_meditation, events=events_meditation, sampling_frequency=cfg['sampling_frequency'])
+epochs_meditation.plot_topomap()
+
+# <codecell>
+
+epochs_baseline = raw_to_epochs(raw=signals_baseline, events=events_baseline, sampling_frequency=cfg['sampling_frequency'])
+epochs_baseline.plot_topomap()
+
+# <codecell>
+
+def plot_topomap_over_time(title, epochs, events, sampling_frequency, n_plots=64, weird_epoch_offset=100):
+    last_frame_in_seconds = np.floor(events[-1, 0] * 1 / sampling_frequency - weird_epoch_offset)
+    all_times = np.linspace(0, last_frame_in_seconds, n_plots)
+    return epochs.plot_topomap(all_times, ch_type='eeg', time_unit='s', ncols=8, nrows='auto', title=title)
+
+# <codecell>
+
+plot_topomap_over_time(epochs=epochs_baseline,
+                       events=events_baseline,
+                       sampling_frequency=cfg['sampling_frequency'],
+                       title='baseline')
+
+# <codecell>
+
+plot_topomap_over_time(epochs=epochs_meditation,
+                       events=events_meditation,
+                       sampling_frequency=cfg['sampling_frequency'],
+                       title='meditation')
+
+# <codecell>
+
+def epochs_to_animation(file_name, epochs, events, sampling_frequency, n_frames, weird_offset=100):
+    to_file_parameters = {'show': False, 'blit': False}
+
+    #fig, anim = epochs.animate_topomap(ch_type='eeg', times=np.arange(0, 40 events[-1, 0] * 1 / cfg['sampling_frequency'] - 10, 0.5),  butterfly=True)
+    fig, anim = epochs.animate_topomap(ch_type='eeg', 
+                                       times=np.linspace(0, events[-1, 0] * 1 / sampling_frequency - weird_offset, n_frames),
+                                       butterfly=True, 
+                                       **to_file_parameters)
+    anim.save(f"{file_name}.mp4")
+
+# <codecell>
+
+epochs_to_animation('baseline', 
+                    epochs=epochs_baseline,
+                    events=events_baseline,
+                    sampling_frequency=cfg['sampling_frequency'],
+                    n_frames=10)
+
+# <codecell>
+
+epochs_to_animation('meditation', 
+                    epochs=epochs_meditation,
+                    events=events_meditation,
+                    sampling_frequency=cfg['sampling_frequency'],
+                    n_frames=10)
+
+# <codecell>
+
+stop
+
+# <codecell>
+
+reject = dict(eeg=180e-6, eog=150e-6)
+event_id, tmin, tmax = {'left/auditory': 1}, -0.2, 0.5
+events = mne.read_events(event_fname)
+epochs_params = dict(events=events, event_id=event_id, tmin=tmin, tmax=tmax,
+                     reject=reject)
+
+evoked_no_ref = mne.Epochs(raw, **epochs_params).average()
+
+title = 'EEG Original reference'
+evoked_no_ref.plot(titles=dict(eeg=title), time_unit='s')
+evoked_no_ref.plot_topomap(times=[0.1], size=3., title=title, time_unit='s')
+
+# <markdowncell>
+
+# ## 
+
+# <markdowncell>
+
+# ## 
 
 # <markdowncell>
 
