@@ -105,7 +105,7 @@ def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'
             .apply(lambda xs: bandpower(xs, config['sampling_frequency'], band_range))
 
     # compute all different ratios
-    for bn_l, bn_r in combinations(cfg['bands'].keys(), 2):
+    for bn_l, bn_r in combinations(config['bands'].keys(), 2):
         bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
         
     return bandpowers 
@@ -207,7 +207,7 @@ def index_to_time(x, time_index, step_size=1):
 
 def get_config_value(config, *args):
     """Helper to get read the config"""
-    return reduce(lambda cfg, val: cfg[val], args, config)
+    return reduce(lambda config, val: config[val], args, config)
                           
 def get_channelsList(config, subject='adelie'):
     subject_config = config['paths']['subjects'][subject]
