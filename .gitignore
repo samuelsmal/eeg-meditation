@@ -144,3 +144,5 @@ __pycache__
 
 *.gif
 *.mp4
+*.pkl
+*.png
