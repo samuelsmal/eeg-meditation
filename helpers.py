@@ -1,3 +1,4 @@
+import time
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -77,7 +78,7 @@ def bandpower(data, sf, band, method='welch', window_sec=None, relative=False):
         
     return bp
 
-def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'):
+def get_bandpower_for_electrode(signal_data, electrode, config, window_size='4s'):
     """Calculates the bandpower for the given electrode
     
     Note that this will take some time... I suggest that you only use a part of the signal to try it out.
@@ -98,7 +99,7 @@ def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'
     a new pandas dataframe of the bandpowers, in addition all ration combinations are listed as well
     """
     bandpowers = {}
-
+    start = time.time()
     for band_name, band_range in config['bands'].items():
         bandpowers[band_name] = signal_data.loc[:, electrode]\
             .rolling(window_size)\
@@ -107,8 +108,10 @@ def get_bandpower_for_electrode(signal_data, electrode, config, window_size='1s'
     # compute all different ratios
     for bn_l, bn_r in combinations(config['bands'].keys(), 2):
         bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
-        
-    return bandpowers 
+    
+    end = time.time()
+    print("Computed bandpower for electrode {} in {}s".format(electrode, end - start))
+    return bandpowers
 
 def aggregate_bandpower(baseline, signal):
     aggregated_fns = ['mean', 'median', 'min', 'max']
