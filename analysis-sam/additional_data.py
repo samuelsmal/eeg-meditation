@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import mne
 import mne_bids
+
 #%matplotlib inline
 #%matplotlib qt
 
@@ -18,11 +19,11 @@ import mne_bids
 
 # <codecell>
 
-path_to_data = '../../BIDS_EEG_meditation_experiment/'
+path_to_data = "../../BIDS_EEG_meditation_experiment/"
 
 # <codecell>
 
-raw_edf = mne_bids.read_raw_bids('sub-001_ses-01_task-meditation_eeg.bdf', path_to_data)
+raw_edf = mne_bids.read_raw_bids("sub-001_ses-01_task-meditation_eeg.bdf", path_to_data)
 
 # <codecell>
 
@@ -38,12 +39,11 @@ events = mne.events_from_annotations(raw_edf)
 
 # <codecell>
 
-raw_edf.plot_psd(fmax=50); # this works
+raw_edf.plot_psd(fmax=50)
+# this works
 
 # <codecell>
 
 raw_edf.plot(events=events)
 
 # <codecell>
-
-

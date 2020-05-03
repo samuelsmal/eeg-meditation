@@ -8,12 +8,15 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import mne
+
 #%matplotlib inline
 #%matplotlib qt
 
 # <codecell>
 
-raw = mne.io.read_raw_fif('../../data/AlphaTheta/sam-AlphaTheta/offline/fif/20200304-144100-raw.fif')
+raw = mne.io.read_raw_fif(
+    "../../data/AlphaTheta/sam-AlphaTheta/offline/fif/20200304-144100-raw.fif"
+)
 
 # <codecell>
 
@@ -25,11 +28,11 @@ events = mne.find_events(raw, initial_event=True, consecutive=True)
 
 # <codecell>
 
-raw.plot_psd(fmax=50);
+raw.plot_psd(fmax=50)
 
 # <codecell>
 
-raw.plot(events=events);
+raw.plot(events=events)
 
 # <codecell>
 
@@ -51,34 +54,34 @@ raw.plot(start=12, duration=4)
 
 # <codecell>
 
-baseline_sam = pd.read_pickle('./sam-AlphaTheta/offline/20200304-144100-raw.pcl')
-baseline2_sam = pd.read_pickle('./sam-AlphaTheta/offline/20200304-144601-raw.pcl')
+baseline_sam = pd.read_pickle("./sam-AlphaTheta/offline/20200304-144100-raw.pcl")
+baseline2_sam = pd.read_pickle("./sam-AlphaTheta/offline/20200304-144601-raw.pcl")
 
 # <codecell>
 
-signals = baseline_sam['signals']
+signals = baseline_sam["signals"]
 
 # <codecell>
+
 
 def plot_signals(data, channels):
     fig, axs = plt.subplots(nrows=data.shape[1], figsize=(40, 1.4 * data.shape[1]))
     for channel in range(data.shape[1]):
         sns.lineplot(data=data[:, channel], ax=axs[channel])
         axs[channel].set_ylabel(channels[channel])
-        
+
     return fig
+
 
 # <codecell>
 
-baseline_fig = plot_signals(baseline_sam['signals'], baseline_sam['ch_names'])
+baseline_fig = plot_signals(baseline_sam["signals"], baseline_sam["ch_names"])
 
 # <codecell>
 
 fig, axs = plt.subplots(nrows=signals.shape[1], figsize=(40, 1.4 * signals.shape[1]))
 for channel in range(signals.shape[1]):
     sns.lineplot(data=signals[:, channel], ax=axs[channel])
-    axs[channel].set_ylabel(baseline_sam['ch_names'][channel])
+    axs[channel].set_ylabel(baseline_sam["ch_names"][channel])
 
 # <codecell>
-
-
