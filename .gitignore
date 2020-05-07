@@ -146,3 +146,5 @@ __pycache__
 *.mp4
 *.pkl
 *.png
+
+/data/*

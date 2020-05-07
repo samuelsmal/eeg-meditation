@@ -18,12 +18,14 @@ import seaborn as sns
 from functools import reduce
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib as mpl
 from functional import seq
 from scipy import signal
 from itertools import combinations 
+from jupyter import display_video
 import mne
 
-#%matplotlib qt 
+#%matplotlib inline
 
 # <codecell>
 
@@ -33,11 +35,28 @@ if [int(i) for i in mne.__version__.split('.')] < [0, 20, 0]:
 
 # <markdowncell>
 
-# ## helper functions
+# ## lib
 
 # <markdowncell>
 
 # ### computation
+
+# <codecell>
+
+def butter_bandpass(lowcut_frequency, highcut_frequency, sampling_frequency, order=5):
+    """Returns a bandpass filter using second-order sections.
+    
+    See here: https://stackoverflow.com/a/48677312
+    """
+    nyq = 0.5 * sampling_frequency
+    l = lowcut_frequency / nyq
+    h = highcut_frequency / nyq
+    
+    return signal.butter(order, [l, h], analog=False)
+    
+def bandpass_filter(data, band, sampling_frequency, order=5):
+    sos = butter_bandpass(*band, sampling_frequency, order=order)
+    return signal.sosfilt(sos, data)
 
 # <codecell>
 
@@ -364,6 +383,251 @@ def get_config_value(config, *args):
 
 # <markdowncell>
 
+# ### video
+
+# <codecell>
+
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from mne import viz
+import numpy as np
+import cv2
+import warnings
+import imageio
+
+def index_to_time(x, time_index, step_size=1):
+    """Helper function to add the axis labels"""
+    if (x < 0 or x * step_size >= len(time_index)):
+        return ''
+    
+    seconds = time_index[int(x*step_size)].total_seconds()
+    return f"{int(seconds/60)}\' {seconds/60:.2f}\""
+
+def gen_topomap_frames(data, times_index_to_plot, pos, title, cmap='PuBu'):
+    # create OpenCV video writer
+    
+    bandpower_over_time_index = data.index
+    
+    frames = []
+    
+
+    cNorm = mpl.colors.Normalize(vmin=data.min().min(), vmax=data.max().max())
+    sm = cm.ScalarMappable(norm=cNorm, cmap=cmap)
+    
+    # loop over your images
+    for idx, time_index in enumerate(times_index_to_plot):
+        fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(10, 10))
+        viz.plot_topomap(data.iloc[time_index, :].T.values, 
+                         cmap=cmap,
+                         sphere=1.,
+                         pos=pos,
+                         axes=axs,
+                         sensors=False,
+                         show_names=True,
+                         show=False,
+                         names=data.columns)
+
+        plt.title(f"{title}: {index_to_time(times_index_to_plot[idx], bandpower_over_time_index)}")
+        
+        #cax = fig.add_axes([1.01, 0.2, 0.05, 0.5])
+        # notice that this will create some weird plot if you plot it interactively... no idea why
+        fig.colorbar(sm, ax=axs, orientation='vertical')
+
+        plt.tight_layout()        
+        
+        # this has to be the last thing
+        fig.canvas.draw()
+
+        mat = np.array(fig.canvas.renderer._renderer)
+        #mat = cv2.cvtColor(mat, cv2.COLOR_RGB2BGR)
+
+        frames.append(mat)        
+    
+        plt.close()
+
+    return frames
+
+def save_frames(frames, file_name, fps=10):
+    """uses imageio to save the given frames
+    
+    does only store `mp4` videos for now
+    
+    frames: list of frames, each frame has to be a 3d array: [height, width, channels]
+    """
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16')
+        imageio.mimsave(file_name, frames, format='mp4', fps=fps)
+
+# <codecell>
+
+def normalise_layout_pos(layout):
+    _t = layout.pos[:, :2]
+    _t -= np.mean(_t, 0)
+    _t /= np.max(_t, 0)
+    
+    return _t
+
+
+def gen_topomap_video(data, normalised_pos, title, fraction_to_plot= 0.01):
+    n_plots = np.int(data.shape[0] * fraction_to_plot) # // cfg['sampling_frequency']
+    bandpower_over_time_index = data.index
+    times_index_to_plot = np.linspace(start=0, stop=bandpower_over_time_index.shape[0] - 1, num=n_plots, dtype=np.int)
+    
+    frames = gen_topomap_frames(data=data,
+                                times_index_to_plot=times_index_to_plot,
+                                pos=normalised_pos,
+                                title=title)
+
+    movie_file_name = f"{title}.mp4"
+    save_frames(frames, movie_file_name)
+    return movie_file_name
+
+
+def gen_topomap_frames_all_bands(data_all_bands, pos, cmap='PuBu', fraction_to_plot=0.01):
+    # create OpenCV video writer
+    
+    bandpower_over_time_index = data_all_bands[list(data_all_bands.keys())[0]].index
+    n_plots = np.int(bandpower_over_time_index.shape[0] * fraction_to_plot) # // cfg['sampling_frequency']
+    times_index_to_plot = np.linspace(start=0, stop=bandpower_over_time_index.shape[0] - 1, num=n_plots, dtype=np.int)
+    
+    frames = []
+    
+    scalar_mappable_for_band = {b: cm.ScalarMappable(norm=mpl.colors.Normalize(vmin=data.min().min(), 
+                                                                               vmax=data.max().max()), 
+                                                     cmap=cmap) 
+                                for b, data in data_all_bands.items()}    
+    n_cols = len(scalar_mappable_for_band.keys())
+    
+    ratios_to_compute = [('gamma', 'beta'),
+                         ('gamma', 'alpha'),
+                         ('beta', 'alpha'),
+                         ('beta', 'theta'),
+                         ('alpha', 'theta')]
+    
+    n_rows = 2
+    # loop over your images
+    
+    ratios = {r: data_all_bands[r[0]] / data_all_bands[r[1]] for r in ratios_to_compute}
+    
+    for idx, time_index in enumerate(times_index_to_plot):
+        fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(10 * n_cols, 10))
+        for ax_idx, (band, data) in enumerate(data_all_bands.items()):
+            viz.plot_topomap(data.iloc[time_index, :].T.values, 
+                             cmap=cmap,
+                             sphere=1.,
+                             pos=pos,
+                             axes=axs[0][ax_idx],
+                             sensors=False,
+                             show_names=True,
+                             show=False,
+                             names=data.columns)
+
+            axs[0][ax_idx].set_title(f"{band}: {index_to_time(times_index_to_plot[idx], bandpower_over_time_index)}")
+        
+            # notice that this will create some weird plot if you plot it interactively... no idea why
+            fig.colorbar(scalar_mappable_for_band[band], 
+                         ax=axs[0][ax_idx], 
+                         orientation='vertical')
+            
+        for ax_idx, (ratio, data) in enumerate(ratios.items()):
+            viz.plot_topomap(data.iloc[time_index, :].T.values, 
+                             cmap=cmap,
+                             sphere=1.,
+                             pos=pos,
+                             axes=axs[1][ax_idx],
+                             sensors=False,
+                             show_names=True,
+                             show=False,
+                             names=data.columns)
+
+            axs[1][ax_idx].set_title(f"{ratio}: {index_to_time(times_index_to_plot[idx], bandpower_over_time_index)}")
+
+        plt.tight_layout()        
+        
+        # this has to be the last thing
+        fig.canvas.draw()
+
+        mat = np.array(fig.canvas.renderer._renderer)
+        #mat = cv2.cvtColor(mat, cv2.COLOR_RGB2BGR)
+
+        frames.append(mat)        
+    
+        plt.close()
+
+    return frames
+
+# <codecell>
+
+from pathlib import Path
+from functools import partial
+from multiprocessing import Pool
+
+def bandpower_with_rolling_window(electrode, signal_data, window_size, sampling_frequency, band_range):
+    # TODO make this better... no need to create a new rolling window for every electrode
+    return (electrode, 
+            signal_data.loc[:, electrode]\
+                       .rolling(window_size)\
+                       .apply(lambda xs: bandpower(xs, sampling_frequency, band_range)))
+
+def compute_bandpowers(data, subject, recording_types=None, recording_ids=None, bands=None, 
+                       window_size='30s', sampling_frequency=None, force=False):
+    """Pay attention to required structure of `data`
+    
+    It should be a dict: 
+        {
+            `recording_type`: [entry for each recording id],
+        }
+        
+    Example:
+    
+        {
+            'meditation': [raws_signals_session_1, raws_signals_session_2],
+            'baseline': [raws_signals_session_1, raws_signals_session_2],
+        }
+    
+    
+    
+    
+    """
+    
+    fn_params = {
+        'window_size': window_size,
+        'sampling_frequency': sampling_frequency,
+    }    
+
+    bandpowers = {}
+    
+    electrodes = list(data.values())[0][0].columns
+    
+    if recording_ids is None:
+        recording_ids =  list(range(len(list(data.values()))))
+        
+    if recording_types is None:
+        recording_types = list(data.keys())
+
+    with Pool() as p:
+        for recording_type in recording_types:
+            bandpowers[recording_type] = {}
+            for recording_id in recording_ids:
+                bandpowers[recording_type][recording_id] = {}
+                for band, band_range in bands.items():
+                    file_path = f"{band}_over_time_{window_size}_{recording_type}_{recording_id}_{subject}.pkl"
+                    if Path(file_path).is_file() and not force:
+                        print('loading from file...')
+                        bandpower_over_time = pd.read_pickle(file_path)
+                    else:
+                        print(f"computing bandpower for band: {band}...")
+                        fn = partial(bandpower_with_rolling_window, **{**fn_params, 'band_range': band_range, 'signal_data': data[recording_type][recording_id]})
+                        bandpower_over_time =  pd.DataFrame(dict(p.map(fn, electrodes)))
+                        bandpower_over_time.to_pickle(file_path)
+
+                    bandpowers[recording_type][recording_id][band] = bandpower_over_time
+                        
+    return bandpowers
+
+# <markdowncell>
+
 # # main stuff
 
 # <markdowncell>
@@ -376,7 +640,7 @@ def get_config_value(config, *args):
 
 cfg = {
     'paths': {
-        'base': '../../data/AlphaTheta',
+        'base': '../../data/AlphaTheta', # this is stupid...
         'channels_file': 'channelsList.txt',
         'subjects': {
             'sam': {
@@ -384,10 +648,11 @@ cfg = {
                 'recordings': {
                     'baseline': [
                         '20200304-144100',
-                        '20200304-144601'
+                        '20200311-111333',
                     ],
                     'meditation': [
-                         '20200304-144933'   
+                        '20200304-144933',
+                        '20200311-111621',
                     ]
                 }
             },
@@ -396,9 +661,11 @@ cfg = {
                 'recordings': {
                     'baseline': [
                         '20200304-151358',
+                        '20200311-104132',
                     ],
                     'meditation': [
                         '20200304-152058',
+                        '20200311-105005',
                     ]
                 }
             }
@@ -409,6 +676,7 @@ cfg = {
     ],
     'reference_electrode': 'A2',
     'default_signal_crop': np.s_[3000:-3000], # this corresponds to ~1 second at the beginning and end, given by the sampling frequency
+    'bandpower_window_width': '30s',
     'sampling_frequency': 300,
     'bands': {
         'gamma': [40, 100],
@@ -423,10 +691,34 @@ cfg = {
 
 # ## raw file
 
+# <markdowncell>
+
+# ## data loading and bandpower computation
+
 # <codecell>
 
-meditation_pd = load_signal_data('meditation', config=cfg)
-baseline_pd = load_signal_data('baseline', config=cfg)
+def load_combined_data(subject, config, remove_references=True):
+    """loads the all the data for the given subject
+    """
+    return {recording_type: [load_signal_data(data_type=recording_type, 
+                                              config=config,
+                                              subject=subject,
+                                              recording=rec,
+                                              remove_references=remove_references) for rec in range(len(recordings))] 
+            for recording_type, recordings in get_config_value(cfg, 'paths', 'subjects', 'sam', 'recordings').items()}
+
+# <codecell>
+
+signal_data_sam = load_combined_data(subject='sam', config=cfg)
+signal_data_adelie = load_combined_data(subject='adelie', config=cfg)
+
+# <markdowncell>
+
+# meditation_pd = load_signal_data('meditation', config=cfg)
+# baseline_pd = load_signal_data('baseline', config=cfg)
+# 
+# signal_data = {'meditation': meditation_pd, 
+#                'baseline': baseline_pd}
 
 # <codecell>
 
@@ -440,93 +732,141 @@ layout = mne.channels.make_eeg_layout(signals.info)
 
 # <codecell>
 
-from pathlib import Path
-from functools import partial
-from multiprocessing import Pool
+bandpowers_sam = compute_bandpowers(signal_data_sam, 
+                                    subject='sam',
+                                    bands=cfg['bands'],
+                                    window_size=cfg['bandpower_window_width'],
+                                    sampling_frequency=cfg['sampling_frequency'])                         
 
-def bandpower_with_rolling_window(electrode, signal_data, window_size, sampling_frequency, band_range):
-        return (electrode, 
-                signal_data.loc[:, electrode]\
-                           .rolling(window_size)\
-                           .apply(lambda xs: bandpower(xs, sampling_frequency, band_range)))
+bandpowers_adelie = compute_bandpowers(signal_data_adelie, 
+                                       subject='adelie',
+                                       bands=cfg['bands'],
+                                       window_size=cfg['bandpower_window_width'],
+                                       sampling_frequency=cfg['sampling_frequency'])                         
+
+# <codecell>
+
+bandpowers_all = compute_bandpowers(signal_data_all, 
+                                    subject='adelie',
+                                    bands=cfg['bands'],
+                                    window_size=cfg['bandpower_window_width'],
+                                    sampling_frequency=cfg['sampling_frequency'])                         
+
+# <markdowncell>
+
+# ## audio
+
+# <codecell>
+
+from sklearn.preprocessing import MinMaxScaler
+
+# <codecell>
+
+alpha_over_theta_meditation = bandpowers['meditation'][0]['alpha'] / bandpowers['meditation'][0]['theta']
+alpha_over_theta_baseline   = bandpowers['baseline'][0]['alpha']   / bandpowers['baseline'][0]['theta']
+
+# <codecell>
+
+def _ratios_for_recordings_(recording, numerator, denominator):
+    return recording[numerator] / recording[denominator]
     
-recording_type = 'meditation'
-recording_id = 0
-subject = 'sam'
 
-def load_or_compute(fn, fn_kwargs, file_path, force=False):
-    if Path(file_path).is_file() and not force:
-        return pd.read_pickle(file_path)
-    else:
-        ret = fn(**fn_kwargs)
-        
-        ret.to_pickle(file_path)
-        
-        return ret
+_alpha_theta_ratio_fn_ = partial(_ratios_for_recordings_, numerator='alpha', denominator='theta')
     
-fn_params = {
-    'window_size': '1s',
-    'sampling_frequency': cfg['sampling_frequency'],
-    'signal_data': meditation_pd, 
-}
+alpha_theta_ratios = {recording_type: [_alpha_theta_ratio_fn_(rec) for rec in recordings.values()] for recording_type, recordings in bandpowers_all.items()}
 
-bands = list(cfg['bands'].keys())
-bands = ['theta']
+# <markdowncell>
 
-with Pool() as p:
-    for band in bands:
-        file_path = f"{band}_over_time_{recording_type}_{recording_id}_{subject}.pkl"
-        if Path(file_path).is_file():
-            bandpower_over_time = pd.read_pickle(file_path)
-        else:
-            fn = partial(bandpower_with_rolling_window, **{**fn_params, 'band_range': cfg['bands'][band]})
-            bandpower_over_time =  pd.DataFrame(dict(p.map(fn, list(meditation_pd.columns))))
-            bandpower_over_time.to_pickle(file_path)
+# I just pick one of the frontal electrodes...
+
+# <codecell>
+
+electrode_of_interest = 'Fp1'
+
+# <codecell>
+
+# just cuttong some stuff away at the beginning and end to have a cleaner signal
+#electrodes_of_interest = ['Fp1', 'T3', 'O1', 'Cz']
+electrodes_of_interest = list(alpha_theta_ratios['baseline'][0].columns)
+n_recordings = len(alpha_theta_ratios['baseline'])
+
+fig, axs = plt.subplots(ncols=n_recordings, 
+                        nrows=len(electrodes_of_interest),
+                        figsize=(5 * len(alpha_theta_ratios['baseline']), len(electrodes_of_interest) * 1.4), 
+                        sharey=True)
+
+
+for recording_type, recording in alpha_theta_ratios.items():
+    for recording_idx in range(n_recordings):
+        for idx, electrode_of_interest in enumerate(electrodes_of_interest):
+            axs[idx][recording_idx].plot(recording[recording_idx].iloc[3000: -3000: 10].loc[:, electrode_of_interest].reset_index(drop=True),
+                                         label=recording_type)
             
+            axs[idx][recording_idx].set_title(electrode_of_interest)
         
+        
+                                     
+        #_t=.loc[alpha_over_theta_baseline.index[3000:-3000:10], electrode_of_interest]
+        #axs[idx].plot(_t.index, _t.values, label="baseline")
+        ##sns.lineplot(x=_t.index, y=_t.values, ax=axs[idx], label="baseline")
+        #_t=alpha_over_theta_meditation.loc[alpha_over_theta_meditation.index[3000:-3000:10], electrode_of_interest]
+        #axs[idx].plot(_t.index, _t.values, label="meditation")
+        ##sns.lineplot(x=_t.index, y=_t.values, ax=axs[idx], label="meditation")
+        #axs[idx].set_title(electrode_of_interest)
+
+fig.suptitle('alpha / theta')
+#axs[-1].legend()
+fig.tight_layout()
+fig.subplots_adjust(top=0.88)
 
 # <codecell>
 
-from mne import viz
-import matplotlib.animation as animation
-
-_t = layout.pos[:, :2]
-_t -= np.mean(_t, 0)
-_t /= np.max(_t, 0)
-
-n_plots = 64
-
-bandpower_over_time_index = bandpower_over_time.index
-
-times_index_to_plot = np.linspace(start=0, stop=bandpower_over_time_index.shape[0] - 1, num=n_plots, dtype=np.int)
-
-
-#fig = plt.figure(figsize=(20, 20))
-#ims = []
-#for idx, time_index in enumerate(times_index_to_plot):
-#    viz.plot_topomap(bandpower_over_time.iloc[time_index, :].T.values, 
-#                     sphere=1.,
-#                     pos=_t,
-#                     sensors=False,
-#                     show_names=True,
-#                     names=bandpower_over_time.columns)
-#    
-#
-#    plt.title(index_to_time(times_index_to_plot[idx], bandpower_over_time_index))
-#    fig.canvas.draw()
-#    fig_val = np.array(fig.canvas.renderer._renderer)[:, :, :3]
-#    ims.append(fig_val)
-#    #plt.close()
+_t=alpha_over_theta_meditation.loc[alpha_over_theta_meditation.index[3000:-3000:10], electrode_of_interest]
 
 # <codecell>
 
-import video
-from importlib import reload
-reload(video)
+_t.index
 
 # <codecell>
 
-video.create_video(data=bandpower_over_time, times_index_to_plot=times_index_to_plot, pos=_t, file_name='movie.mp4')
+# normalising it using the baseline to be between 0 and 1
+
+
+# <codecell>
+
+alpha_over_theta_meditation.loc[alpha_over_theta_meditation.notna().any(axis=1), :].describe()
+
+# <codecell>
+
+alpha_over_theta_meditation.loc[:, 'Fp1'].describe()
+
+# <codecell>
+
+
+
+# <markdowncell>
+
+# # Video
+
+# <codecell>
+
+normalised_pos = normalise_layout_pos(layout)
+
+#video_file_names = [gen_topomap_video(bp2['sam']['meditation'][band], normalised_pos, f"{band}-{subject}-{recording_type}-{recording_id}") for b in cfg['bands'].keys()]
+
+# <codecell>
+
+
+
+# <codecell>
+
+frames = gen_topomap_frames_all_bands(bandpowers['baseline'][0], normalised_pos, fraction_to_plot=0.01)
+
+save_frames(frames, 'baseline_all_bands_30s.mp4')
+
+# <codecell>
+
+display_video('baseline_all_bands_30s.mp4')
 
 # <codecell>
 
@@ -534,477 +874,19 @@ stop
 
 # <codecell>
 
-frames = [] # for storing the generated images
-fig = plt.figure(figsize=(20, 20))
-for img in ims:
-    frames.append(plt.imshow(img, animated=True))
-
-ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True,
-                                repeat_delay=1000)
-#ani.save('movie.mp4')
-#plt.close()
-plt.show()
-
-# <codecell>
-
-stop
-
-# <codecell>
-
-
-
-# <codecell>
-
-plt.imshow(fig_val)
-
-# <codecell>
-
-plt.imshow(ims[0])
-
-# <codecell>
-
-fig = plt.figure(figsize=(20, 20))
-ani = animation.ArtistAnimation(fig, ims, interval=50, blit=True,
-                                repeat_delay=1000)
-
-# ani.save('dynamic_images.mp4')
-plt.show() 
-
-# <codecell>
-
-fig.suptitle(index_to_time())
-
-# <codecell>
-
-import matplotlib.cm as cm
-
-img = [] # some array of images
-frames = [] # for storing the generated images
-fig = plt.figure()
-for i in xrange(6):
-    frames.append([plt.imshow(img[i], cmap=cm.Greys_r,animated=True)])
-
-ani = animation.ArtistAnimation(fig, img, interval=50, blit=True,
-                                repeat_delay=1000)
-# ani.save('movie.mp4')
-plt.show()
-
-# <codecell>
-
-
-
-# <codecell>
-
-
-
-# <codecell>
-
-
-
-# <codecell>
-
-
-
-# <codecell>
-
-
-
-# <codecell>
-
-import warnings
-from itertools import groupby
-import pathlib
-import logging
-import numpy as np
-import cv2
-import imageio
-import colorsys
-import seaborn as sns
-
-from PIL import Image
-
-
-def plot_drosophila_2d(pts=None, draw_joints=None, img=None, colors=None, thickness=None,
-                       draw_limbs=None, circle_color=None):
-    """
-    taken from https://github.com/NeLy-EPFL/drosoph3D/blob/master/GUI/plot_util.py
-    """
-    if colors is None:
-        colors = skeleton.colors
-    if thickness is None:
-        thickness = [2] * 10
-    if draw_joints is None:
-        draw_joints = np.arange(skeleton.num_joints)
-    if draw_limbs is None:
-        draw_limbs = np.arange(skeleton.num_limbs)
-    for joint_id in range(pts.shape[0]):
-        limb_id = skeleton.get_limb_id(joint_id)
-        if (pts[joint_id, 0] == 0 and pts[joint_id, 1] == 0) or limb_id not in draw_limbs or joint_id not in draw_joints:
-            continue
-
-        color = colors[limb_id]
-        r = 5 if joint_id != skeleton.num_joints - 1 and joint_id != ((skeleton.num_joints // 2) - 1) else 8
-        cv2.circle(img, (pts[joint_id, 0], pts[joint_id, 1]), r, color, -1)
-
-        # TODO replace this with skeleton.bones
-        if (not skeleton.is_tarsus_tip(joint_id)) and (not skeleton.is_antenna(
-                joint_id)) and (joint_id != skeleton.num_joints - 1) and (
-                joint_id != (skeleton.num_joints // 2 - 1)) and (not (
-                pts[joint_id + 1, 0] == 0 and pts[joint_id + 1, 1] == 0)):
-            cv2.line(img, (pts[joint_id][0], pts[joint_id][1]), (pts[joint_id + 1][0], pts[joint_id + 1][1]),
-                     color=color,
-                     thickness=thickness[limb_id])
-
-    if circle_color is not None:
-        img = cv2.circle(img=img, center=(img.shape[1]-20, 20), radius=10, color=circle_color, thickness=-1)
-
-    return img
-
-
-#def _get_and_check_file_path_(args, template=SetupConfig.value('video_root_path')):
-#    gif_file_path = template.format(begin_frame=args[0], end_frame=args[-1])
-#    pathlib.Path(gif_file_path).parent.mkdir(parents=True, exist_ok=True)
-#
-#    return gif_file_path
-
-
-def _save_frames_(file_path, frames, format='mp4', **kwargs):
-    """
-    If format==GIF then fps has to be None, duration should be ~10/60
-    If format==mp4 then duration has to be None, fps should be TODO
-    """
-    if format.lower() == 'gif':
-        _kwargs = {'duration': 10/60}
-    elif format.lower() == 'mp4':
-        _kwargs = {'fps': 24}
-
-    pathlib.Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', message='IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16')
-        imageio.mimsave(file_path, frames, format=format, **{**_kwargs, **kwargs})
-
-
-def _add_frame_and_embedding_id_(frame, emb_id=None, frame_id=None, color=None):
-    params = {"org": (0, frame.shape[0] // 2),
-              "fontFace": 1,
-              "fontScale": 1,
-              "color": color,
-              "thickness": 1}
-
-    if emb_id is not None:
-       frame = cv2.putText(img=np.copy(frame), text=f"cluster_id: {emb_id:0>3}", **params)
-
-    if frame_id is not None:
-       frame = cv2.putText(img=np.copy(frame), text=f"frame_id: {frame_id:0>4}", **{**params, 'org': (params['org'][0], params['org'][1] + 24)})
-
-    return frame
-
-
-def _float_to_int_color_(colors):
-    return (np.array(colors) * 255).astype(np.int).tolist()
-
-def comparision_video_of_reconstruction(positional_data, cluster_assignments, image_id_with_exp, labels,
-                                        n_train_data_points, images_paths, cluster_colors=None,
-                                        run_desc=None, epochs=None):
-    """Creates a video (saved as a gif) with the embedding overlay, displayed as an int.
-
-    Args:
-        xs: [<pos data>] list of pos data, of shape: [frames, limb, dimensions] (can be just one, but in an array)
-            will plot all of them, the colors get lighter
-        embeddings: [<embeddings_id>]
-            assumed to be in sequence with `get_frame_path` function.
-            length of embeddings -> number of frames
-        file_path: <str>, default: SEQUENCE_GIF_PATH
-            file path used to get
-    Returns:
-        <str>                            the file path under which the gif was saved
-    """
-    text_default_args = {
-        "fontFace": 1,
-        "fontScale": 1,
-        "thickness": 1,
-    }
-
-
-    n_frames = len(images_paths)
-    image_height, image_width, _ = cv2.imread(images_paths[0]).shape
-    lines_pos = ((np.array(range(n_frames)) / n_frames) * image_width).astype(np.int).tolist()
-
-    _train_test_split_marker = np.int(n_train_data_points / n_frames * image_width)
-    _train_test_split_marker_colours = [(255, 0, 0), (0, 255, 0)]
-
-    _colors_for_pos_data = [lighten_int_colors(skeleton.colors, amount=v) for v in np.linspace(1, 0.3, len(positional_data))]
-
-    def pipeline(frame_id, frame):
-        f = _add_frame_and_embedding_id_(frame, cluster_assignments[frame_id], frame_id,
-                                         color=cluster_colors[cluster_assignments[frame_id]])
-
-        # xs are the multiple positional data to plot
-        for x_i, x in enumerate(positional_data):
-            f = plot_drosophila_2d(x[frame_id].astype(np.int), img=f, colors=_colors_for_pos_data[x_i])
-
-
-        # train test split marker
-        if n_train_data_points == frame_id:
-            cv2.line(f, (_train_test_split_marker, image_height - 20), (_train_test_split_marker, image_height - 40), (255, 255, 255), 1)
-        else:
-            cv2.line(f, (_train_test_split_marker, image_height - 10), (_train_test_split_marker, image_height - 40), (255, 255, 255), 1)
-
-
-
-        # train / test text
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text='train' if frame_id < n_train_data_points else 'test',
-                        org=(_train_test_split_marker, image_height - 40),
-                        color=_train_test_split_marker_colours[0 if frame_id < n_train_data_points else 1])
-
-        # experiment id
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=data.experiment_key(obj=image_id_with_exp[frame_id][1]),
-                        org=(0, 20),
-                        color=(255, 255, 255))
-
-        # image id
-        #_text_size, _ = cv2.getTextSize(**text_default_args, text=experiment_key(obj=image_id_with_exp[frame_id][1]))
-        #f = cv2.putText(**text_default_args,
-        #                img=f,
-        #                text=image_id_with_exp[frame_id][0],
-        #                org=(_text_size[0], 20),
-        #                color=(255, 255, 255))
-
-        # class label
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=labels[frame_id],
-                        org=(0, 40),
-                        color=(255, 255, 255))
-
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=run_desc,
-                        org=(0, 60),
-                        color=(255, 255, 255))
-
-        # cluster assignment bar
-        for line_idx, l in enumerate(lines_pos):
-            if line_idx == frame_id:
-                cv2.line(f, (l, image_height), (l, image_height - 20), cluster_colors[cluster_assignments[line_idx]], 2)
-            else:
-                cv2.line(f, (l, image_height), (l, image_height - 10), cluster_colors[cluster_assignments[line_idx]], 1)
-
-
-        return f
-
-    frames = (pipeline(frame_id, cv2.imread(path)) for frame_id, path in enumerate(images_paths) if is_file(path))
-
-    output_path = f"{SetupConfig.value('video_root_path')}/{run_desc}_e-{epochs}_hubert_full.mp4"
-    _save_frames_(output_path, frames, format='mp4')
-
-    return output_path
-
-
-
-def plot_embedding_assignment(x_id_of_interest, X_embedded, label_assignments):
-    seen_labels = label_assignments['label'].unique()
-    _cs = sns.color_palette(n_colors=len(seen_labels))
-
-    fig = plt.figure(figsize=(10, 10))
-    behaviour_colours = dict(zip(seen_labels, _cs))
-
-    for l, c in behaviour_colours.items():
-        _d = X_embedded[label_assignments['label'] == l]
-        # c=[c] since matplotlib asks for it
-        plt.scatter(_d[:, 0], _d[:,1], c=[c], label=l.name, marker='.')
-
-    #print(x_id_of_interest)
-    _t = label_assignments.iloc[x_id_of_interest]['label']
-    #print(_t)
-    cur_color = behaviour_colours[_t]
-    plt.scatter(X_embedded[x_id_of_interest, 0], X_embedded[x_id_of_interest, 1], c=[cur_color], linewidth=10, edgecolors=[[0, 0, 1]])
-    plt.legend()
-    plt.title('simple t-SNE on latent space')
-
-    # TODO I would like to move the lower part to a different function, not tested if that works
-    # though
-    # If we haven't already shown or saved the plot, then we need to
-    # draw the figure first...
-    fig.canvas.draw()
-    #fig.canvas.draw_idle()
-#
-    ## Now we can save it to a numpy array.
-    #plot_data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)\
-    #              .reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    #
-    #return plot_data
-
-    fig_val = np.array(fig.canvas.renderer._renderer)[:, :, :3]
-    plt.close()
-    return fig_val
-
-def combine_images_h(img1, img2):
-    h1, w1 = img1.shape[:2]
-    h2, w2 = img2.shape[:2]
-    vis = np.zeros((max(h1, h2), w1+w2, img1.shape[2]), np.uint8)
-    vis[:h1, :w1, :] = img1
-    vis[:h2, w1:w1+w2, :] = img2
-    #vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
-
-    return vis
-    #cv2.imshow("test", vis)
-
-
-
-def video_angle(cluster_assignments, images_paths_for_experiments, cluster_id_to_visualize=None, cluster_colors=None, run_desc=None, as_frames=False):
-    """
-    run_desc refers to the model experimnt id, not fly-experiment
-
-
-    ... in general stuff in here sucks... big time...
-    """
-    if cluster_id_to_visualize is None:
-        cluster_assignment_idx = list(range(len(cluster_assignments)))
-    else:
-        cluster_assignment_idx = np.where(cluster_assignments == cluster_id_to_visualize)[0]
-
-    text_default_args = {
-        "fontFace": 1,
-        "fontScale": 1,
-        "thickness": 1,
-    }
-
-    cluster_ids = np.unique(cluster_assignments)
-    if cluster_colors is None:
-        cluster_colors = dict(zip(cluster_ids, _float_to_int_color_(sns.color_palette(palette='bright', n_colors=len(cluster_ids)))))
-
-    image_height, image_width, _ = cv2.imread(images_paths_for_experiments[0][1]).shape
-    lines_pos = ((np.array(range(len(cluster_assignments))) / len(cluster_assignments)) * image_width).astype(np.int)[cluster_assignment_idx].tolist()
-
-    def pipeline(frame_nb, frame, frame_id, embedding_id, experiment, experiment_path=None):
-        # frame_nb is the number of the frame shown, continuous
-        # frame_id is the id of the order of the frame,
-        # e.g. frame_nb: [0, 1, 2, 3], frame_id: [123, 222, 333, 401]
-        # kinda ugly... note that some variables are from the upper "frame"
-        #f = _add_frame_and_embedding_id_(frame, embedding_id, frame_id)
-        f = frame
-
-        # experiment id
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=data._key_(experiment),
-                        org=(0, 20),
-                        color=(255, 255, 255))
-
-        # image id
-        _text_size, _ = cv2.getTextSize(**text_default_args, text=data._key_(experiment))
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=pathlib.Path(experiment_path).stem,
-                        org=(_text_size[0], 20),
-                        color=(255, 255, 255))
-
-        # model experiment description
-        f = cv2.putText(**text_default_args,
-                        img=f,
-                        text=run_desc,
-                        org=(0, 40),
-                        color=(255, 255, 255))
-
-        # cluster assignment bar
-        for line_idx, l in enumerate(lines_pos):
-            if line_idx == frame_nb:
-                cv2.line(f, (l, image_height), (l, image_height - 20), cluster_colors[cluster_assignments[cluster_assignment_idx[line_idx]]], 2)
-            else:
-                cv2.line(f, (l, image_height), (l, image_height - 10), cluster_colors[cluster_assignments[cluster_assignment_idx[line_idx]]], 1)
-
-
-        return f
-
-    frames = (pipeline(frame_nb, cv2.imread(experiment[1]), frame_id, cluster_assignment,
-                       experiment[0], experiment_path=experiment[1])
-              for frame_nb, (frame_id, cluster_assignment, experiment) in enumerate(zip(
-                  cluster_assignment_idx,
-                  cluster_assignments[cluster_assignment_idx],
-                  np.array(images_paths_for_experiments)[cluster_assignment_idx]))
-              if pathlib.Path(experiment[1]).is_file())
-
-    if as_frames:
-        return frames
-    else:
-        output_path = config.EXPERIMENT_VIDEO_PATH.format(experiment_id=run_desc, vid_id=cluster_id_to_visualize or 'all')
-        _save_frames_(output_path, frames, format='mp4')
-
-        return output_path
-
-# new video helpers
-
-def _path_for_image_(image_id, label):
-    base_path = SetupConfig.value('experiment_root_path')
-    exp_path = SetupConfig.value('experiment_path_template').format(base_path=base_path,
-                                                         study_id=label.study_id,
-                                                         fly_id=label.fly_id,
-                                                         experiment_id=label.experiment_id)
-    return SetupConfig.value('fly_image_template').format(base_experiment_path=exp_path, image_id=image_id)
-
-def resize_image(img, new_width=304):
-    wpercent = (new_width / float(img.size[0]))
-    hsize = int((float(img.size[1]) * float(wpercent)))
-    return img.resize((new_width, hsize), Image.ANTIALIAS)
-
-def pad_with_last(list_of_lists):
-    max_len = max([len(i) for i in list_of_lists])
-
-    def _pad_with_last_(ls, to_len):
-        diff_len = to_len - len(ls)
-        return ls + [ls[-1]] * diff_len
-
-    return [_pad_with_last_(ls, max_len) for ls in list_of_lists]
-
-def group_video_of_cluster(cluster_id, paths, run_desc, epochs, n_sequences_to_draw=9,
-                           pad_videos=False):
-    images = [[resize_image(Image.open(p)) for p in ax1] for ax1 in paths[:n_sequences_to_draw]]
-
-    if pad_videos:
-        images = pad_with_last(images)
-
-    img = images[0][0]
-
-    element_width, element_height = img.size
-    n_elements_x_dim = np.int(np.sqrt(n_sequences_to_draw))
-    n_elements_y_dim = np.int(np.sqrt(n_sequences_to_draw))
-
-    combined_images = [Image.new('RGB', (n_elements_x_dim * element_width, n_elements_y_dim * element_height)) for _ in range(len(images[0]))]
-
-    for sequence_id, sequence in enumerate(images):
-        x_offset = (sequence_id % n_elements_x_dim) * element_width
-        y_offset = (sequence_id // n_elements_x_dim) * element_height
-
-        for frame_number, image in enumerate(sequence):
-            combined_images[frame_number].paste(image, (x_offset, y_offset))
-
-    #return combined_images, images
-
-    file_path = (f"{SetupConfig.value('video_root_path')}"
-                 f"/group_of_cluster-{cluster_id}-{run_desc}-e-{epochs}.mp4")
-    _save_frames_(file_path, combined_images)
-    return file_path
-
-def group_video_of_clusters(cluster_assignments, frames_with_labels, run_desc, epochs,
-                            n_sequences_to_draw=9, n_clusters_to_draw=10):
-    grouped = group_by_cluster(cluster_assignments)
-
-    sorted_groups = sorted([(g, sorted(vals, key=len, reverse=True)) for g, vals in grouped.items()],
-                           key=lambda x: max(map(len, x[1])),
-                           reverse=True)
-
-    for cluster_id, sequences in sorted_groups[:n_clusters_to_draw]:
-        sequences[:n_sequences_to_draw]
-        paths = [[_path_for_image_(image_id, label) for image_id, label in frames_with_labels[seq]] for seq in sequences]
-        #return paths
-        yield cluster_id, group_video_of_cluster(cluster_id, paths, run_desc, epochs=epochs, n_sequences_to_draw=n_sequences_to_draw)
-
-
+def gen_topomap_video_all(data, normalised_pos, title, fraction_to_plot= 0.01):
+    n_plots = np.int(data.shape[0] * fraction_to_plot) # // cfg['sampling_frequency']
+    bandpower_over_time_index = data.index
+    times_index_to_plot = np.linspace(start=0, stop=bandpower_over_time_index.shape[0] - 1, num=n_plots, dtype=np.int)
+    
+    frames = gen_topomap_frames(data=data,
+                                times_index_to_plot=times_index_to_plot,
+                                pos=normalised_pos,
+                                title=title)
+
+    movie_file_name = f"{title}.mp4"
+    save_frames(frames, movie_file_name)
+    return movie_file_name
 
 # <codecell>
 
@@ -1056,10 +938,6 @@ aggregated_power_sam
 # <markdowncell>
 
 # ## spectrogram videos
-
-# <codecell>
-
-ls ../../data/AlphaTheta/sam-AlphaTheta/offline/fif
 
 # <codecell>
 
