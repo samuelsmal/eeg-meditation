@@ -166,9 +166,11 @@ def compute_psd(window, psde, psd_ref):
     psd =  np.sum(psd, axis=1)                                      #  Over frequencies
     m_psd = np.mean(psd)                                            #  Over channels
 
-    r_m_psd = m_psd / psd_ref
+    return m_psd
 
-    return r_m_psd
+    #r_m_psd = m_psd / psd_ref
+
+    #return r_m_psd
 
 #----------------------------------------------------------------------
 def run(cfg, state=mp.Value('i', 1), queue=None):
