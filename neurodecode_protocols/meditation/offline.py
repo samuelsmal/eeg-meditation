@@ -7,7 +7,7 @@
 """
 import sys
 import cv2
-import time 
+import time
 import multiprocessing as mp
 import pygame.mixer as pgmixer
 
@@ -41,30 +41,30 @@ def check_config(cfg):
         'SCREEN_POS': (0, 0),
         'GLASS_USE':False,
     }
-    
+
     for key in critical_vars['COMMON']:
         if not hasattr(cfg, key):
             logger.error('%s is a required parameter' % key)
             raise RuntimeError
-    
+
     for key in optional_vars:
         if not hasattr(cfg, key):
             setattr(cfg, key, optional_vars[key])
-            logger.warning('Setting undefined parameter %s=%s' % (key, getattr(cfg, key)))    
+            logger.warning('Setting undefined parameter %s=%s' % (key, getattr(cfg, key)))
 
 #----------------------------------------------------------------------
 def run(cfg, state=mp.Value('i', 1), queue=None):
     """
     Offline protocol for Alpha/Theta neurofeedback.
     """
-    
+
     # visualizer
     keys = {'left':81, 'right':83, 'up':82, 'down':84, 'pgup':85, 'pgdn':86,
         'home':80, 'end':87, 'space':32, 'esc':27, ',':44, '.':46, 's':115, 'c':99,
         '[':91, ']':93, '1':49, '!':33, '2':50, '@':64, '3':51, '#':35}
-    
+
     redirect_stdout_to_queue(logger, queue, 'INFO')
-    
+
     # Wait the recording to start (GUI)
     while state.value == 2: # 0: stop, 1:start, 2:wait
         pass
@@ -72,62 +72,62 @@ def run(cfg, state=mp.Value('i', 1), queue=None):
     # Protocol runs if state equals to 1
     if not state.value:
         sys.exit(-1)
-    
+
     global_timer = qc.Timer(autoreset=False)
-    
+
     # Init trigger communication
     cfg.tdef = trigger_def(cfg.TRIGGER_FILE)
     trigger = pyLptControl.Trigger(state, cfg.TRIGGER_DEVICE)
     if trigger.init(50) == False:
         logger.error('\n** Error connecting to trigger device.')
         raise RuntimeError
-    
+
     # Preload the starting voice
     pgmixer.init()
-    pgmixer.music.load(cfg.START_VOICE_FILE)   
-    
+    pgmixer.music.load(cfg.START_VOICE_FILE)
+
     # Init feedback
     viz = BarVisual(cfg.GLASS_USE, screen_pos=cfg.SCREEN_POS, screen_size=cfg.SCREEN_SIZE)
     viz.fill()
     viz.put_text('Close your eyes and relax')
     viz.update()
-    
+
     # PLay the start voice
-    pgmixer.music.play()    
-    
+    pgmixer.music.play()
+
     # Wait a key press
     key = 0xFF & cv2.waitKey(0)
     if key == keys['esc'] or not state.value:
         sys.exit(-1)
-    
+
     viz.fill()
     viz.put_text('Recording in progress')
-    viz.update()    
-    
+    viz.update()
+
     #----------------------------------------------------------------------
     # Main
-    #----------------------------------------------------------------------        
+    #----------------------------------------------------------------------
     trigger.signal(cfg.tdef.INIT)
-    
+
     while state.value == 1 and global_timer.sec() < cfg.GLOBAL_TIME:
-        
+
         key = cv2.waitKey(1)
         if key == keys['esc']:
             with state.get_lock():
                 state.value = 0
-                
+
     trigger.signal(cfg.tdef.END)
-    
+
     # Remove the text
     viz.fill()
     viz.put_text('Recording is finished')
-    viz.update()    
-    
+    viz.update()
+
     # Ending voice
     pgmixer.music.load(cfg.END_VOICE_FILE)
     pgmixer.music.play()
     time.sleep(5)
-    
+
     # Close cv2 window
     viz.finish()
 
@@ -138,12 +138,12 @@ def batch_run(cfg_module):
     """
     cfg = pu.load_config(cfg_module)
     check_config(cfg)
-    run(cfg)    
+    run(cfg)
 
 if __name__ == '__main__':
-    #if len(sys.argv) < 2:
-    #    cfg_module = input('Config module name? ')
-    #else:
-    #    cfg_module = sys.argv[1]
-    cfg_module = '/home/sam/proj/epfl/eeg-meditation/new_scripts/AlphaTheta/sam-AlphaTheta/config_offline_sam-AlphaTheta'
-    batch_run(cfg_module)   
+    if len(sys.argv) < 2:
+        cfg_module = input('Config module name? ')
+    else:
+        cfg_module = sys.argv[1]
+    cfg_module = '/home/sam/proj/epfl/eeg-meditation/nfme/neurodecode_protocols/meditation/sam-meditation/config_offline_sam-meditation'
+    batch_run(cfg_module)

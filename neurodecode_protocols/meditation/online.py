@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 #coding:utf-8
-"""
-  Author:  Arnaud Desvachez --<arnaud.desvachez@gmail.com>
-  Purpose: Online protocol for deep meditation state neurofeedback.
-  Created: 14.10.2019
-"""
 
 import mne
 import os
 import sys
-
-sys.path.append("/home/sam/proj/epfl/eeg-meditation/NeuroDecode")
-
 
 import time
 import numpy as np
@@ -220,12 +212,6 @@ def run(cfg, state=mp.Value('i', 1), queue=None):
     #----------------------------------------------------------------------
     harmonic_sound, unharmonic_sound = init_feedback_sounds(cfg)
 
-    #alpha_sound = sounds[0]
-    #theta_sound = sounds[1]
-
-    #alpha_sup_sound = sounds[2]
-    #theta_sup_sound = sounds[3]
-
     #----------------------------------------------------------------------
     # Main
     #----------------------------------------------------------------------
@@ -320,10 +306,10 @@ def batch_run(cfg_module):
 
 #----------------------------------------------------------------------
 if __name__ == '__main__':
-    #if len(sys.argv) < 2:
-    #    cfg_module = input('Config module name? ')
-    #else:
-    #    cfg_module = sys.argv[1]
+    if len(sys.argv) < 2:
+        cfg_module = input('Config module name? ')
+    else:
+        cfg_module = sys.argv[1]
 
-    cfg_module = '/home/sam/proj/epfl/eeg-meditation/new_scripts/AlphaTheta/sam-AlphaTheta/config_online_sam-AlphaTheta'
+    #cfg_module = '/home/sam/proj/epfl/eeg-meditation/new_scripts/AlphaTheta/sam-AlphaTheta/config_online_sam-AlphaTheta'
     batch_run(cfg_module)

@@ -32,5 +32,5 @@ THETA_FEEDBACK_PATH = r'C:\Users\adesvachez\Documents\meditation_sounds\ocean-wa
 ALPHA_SUP_FB_PATH = r'C:\Users\adesvachez\Documents\meditation_sounds\A-Tone.wav'
 THETA_SUP_FB_PATH = r'C:\Users\adesvachez\Documents\meditation_sounds\ZenBuddhistTempleBell.wav'
 
-HARMONIC_SOUND_PATH = '/home/sam/Downloads/Harmonisch.wav'
-UNHARMONIC_SOUND_PATH = '/home/sam/Downloads/Unharmonisch.wav'
+HARMONIC_SOUND_PATH =   '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds/Harmonisch.wav'
+UNHARMONIC_SOUND_PATH = '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds/Unharmonisch.wav'
