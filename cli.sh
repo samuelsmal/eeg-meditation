@@ -22,8 +22,7 @@ display_help() {
 # - https://gist.github.com/magnetikonline/22c1eb412daa350eeceee76c97519da8
 # - https://gist.github.com/cosimo/3760587
 
-opts=$(getopt \
-  -o h\
+opts=$(getopt o h\
   --long help,offline,online \
   --name "${0##*/}" \
   -- "$@"
