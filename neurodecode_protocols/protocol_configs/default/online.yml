@@ -9,8 +9,8 @@ sampling_frequency: 300
 _root_music_path_: '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds'
 
 spatial_channels: ['Fz', 'F3', 'F4', 'F7', 'F8', 'Cz', 'C3', 'C4', 'P3', 'Pz', 'P4']
-alpha_channels: ['Fz']
-theta_channels: ['Fz']
+alpha_channels: ['Fz', 'Cz', 'F3', 'F4', 'Fp1', 'Fp2']
+theta_channels: ['Fz', 'Cz', 'F3', 'F4', 'Fp1', 'Fp2']
 
 alpha_band_freq:
   min: 8
