@@ -11,8 +11,10 @@ fi
 display_help() {
   echo "$(basename "$0") CLI for NFME, to be used with NeuroDecode"
   echo
-  echo "-h | --help    # displays this message"
-  echo "--dvorak       # runs dvorak et al study feedback sound"
+  echo "-h | --help        # displays this message"
+  echo "--dvorak           # runs dvorak et al study feedback sound"
+  echo "--wave-rain-pos    # runs wave and rain feedback sound"
+  echo "--wave-rain-neg    # runs wave and rain feedback sound"
   echo
   echo
 }
@@ -27,7 +29,7 @@ run_online() {
 
 opts=$(getopt \
   -o h \
-  --long help,dvorak \
+  --long help,dvorak,wave-rain-pos,wave-rain-neg \
   --name "${0##*/}" \
   -- "$@"
 )
@@ -47,11 +49,18 @@ while [[ $# -gt 0 ]]; do
       run_online ./protocol_configs/dvorak_study.yml
       exit 0;
       ;;
-    --snippet)
+    --wave-rain-pos)
       echo
       echo "running sound snippet version"
       echo
-      run_online ./protocol_configs/sound_snippets.yml
+      run_online ./protocol_configs/wave_and_rain_positive.yml
+      exit 0;
+      ;;
+    --wave-rain-neg)
+      echo
+      echo "running sound snippet version"
+      echo
+      run_online ./protocol_configs/wave_and_rain_negative.yml
       exit 0;
       ;;
     *)

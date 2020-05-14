@@ -1,26 +1,4 @@
-buffer_size: 2                     # Stream buffer [sec]
-window_size: 2                     # window length of acquired data when calling get_window [sec]
-timer_sleep: 0.6                   # in seconds
-global_time: 300
-njobs: 4                           # For multicore PSD processing
-
-sampling_frequency: 300
-
-_root_music_path_: '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds/'
-
-spatial_channels: ['Fz', 'F3', 'F4', 'F7', 'F8', 'Cz', 'C3', 'C4', 'P3', 'Pz', 'P4']
-alpha_channels: ['Pz']
-theta_channels: ['Pz']
-
-alpha_band_freq:
-  min: 8
-  max': 12
-theta_band_freq:
-  min: 4
-  max: 8
-
-script_beat_harmony_melody_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_melody.wav"
-script_beat_harmony_path: "{_root_music_path_}/dvorak_study/script_beat_harmony.wav"
 music_state_1_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_melody_without_script.wav"
 music_state_2_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_without_script.wav"
-music_window_size: 10
+
+music_mix_style: 'REPLACING'

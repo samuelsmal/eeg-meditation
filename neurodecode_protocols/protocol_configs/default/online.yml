@@ -1,0 +1,22 @@
+buffer_size: 2                     # Stream buffer [sec]
+window_size: 2                     # window length of acquired data when calling get_window [sec]
+timer_sleep: 0.6                   # in seconds
+global_time: 300
+njobs: 4                           # For multicore PSD processing
+
+sampling_frequency: 300
+
+_root_music_path_: '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds'
+
+spatial_channels: ['Fz', 'F3', 'F4', 'F7', 'F8', 'Cz', 'C3', 'C4', 'P3', 'Pz', 'P4']
+alpha_channels: ['Fz']
+theta_channels: ['Fz']
+
+alpha_band_freq:
+  min: 8
+  max': 12
+theta_band_freq:
+  min: 4
+  max: 8
+
+window_size_psd_max: 5 # note that this is roughly * timer_sleep seconds

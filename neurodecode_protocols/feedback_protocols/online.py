@@ -19,6 +19,7 @@ from neurodecode.stream_receiver.stream_receiver import StreamReceiver
 
 from lib import utils as protocol_utils
 from lib.config import ProtocolConfig
+from lib.music import mix_sounds, MusicMixStyle
 
 os.environ['OMP_NUM_THREADS'] = '1' # actually improves performance for multitaper
 mne.set_log_level('ERROR')          # DEBUG, INFO, WARNING, ERROR, or CRITICAL
@@ -81,7 +82,7 @@ def run(cfg, state=mp.Value('i', 1), queue=None):
     #----------------------------------------------------------------------
     # Main
     #----------------------------------------------------------------------
-    global_timer = qc.Timer(autoreset=False)
+    global_timer   = qc.Timer(autoreset=False)
     internal_timer = qc.Timer(autoreset=True)
 
     inc = 0
@@ -94,6 +95,9 @@ def run(cfg, state=mp.Value('i', 1), queue=None):
     last_ts = None
 
     #psd_ratio = np.zeros()
+
+    last_ratio = None
+    measured_psd_ratios = np.full(cfg['window_size_psd_max'], np.nan)
 
     while global_timer.sec() < cfg['global_time']:
 
@@ -123,22 +127,31 @@ def run(cfg, state=mp.Value('i', 1), queue=None):
         # Computing the Power Spectrum Densities using multitapers
         #----------------------------------------------------------------------
         # PSD
-        psd_alpha = protocol_utils.compute_psd(window, psde_alpha)
+        #psd_alpha = protocol_utils.compute_psd(window, psde_alpha)
         psd_theta = protocol_utils.compute_psd(window, psde_theta)
 
         # Ratio Alpha / Theta
-        psd_ratio = psd_alpha / psd_theta
+        #psd_ratio = psd_alpha / psd_theta
+        psd_ratio = psd_theta
 
-        if psd_ratio > current_max:
-            current_max = psd_ratio
+        measured_psd_ratios = add_to_queue(measured_psd_ratios, psd_ratio)
 
-        music_ratio = psd_ratio / current_max
+        current_music_ratio  = psd_ratio / np.max(measured_psd_ratios[~np.isnan(measured_psd_ratios)])
 
-        sound_1.set_volume(music_ratio)
-        sound_2.set_volume(1 - music_ratio)
+        if last_ratio is not None:
+            applied_music_ratio = last_ratio + (current_music_ratio - last_ratio) * 0.1
+        else:
+            applied_music_ratio = current_music_ratio
 
+        mix_sounds(style=cfg['music_mix_style'],
+                   sounds=(sound_1, sound_2),
+                   feature_value=applied_music_ratio)
 
-        print(f"Ratio Alpha/Theta: {psd_ratio:0.3f}, music_ratio: {music_ratio:0.3f}")
+        print((f"Ratio Alpha/Theta: {psd_ratio:0.3f}"
+               f", current_music_ratio: {current_music_ratio:0.3f}"
+               f", applied music ratio: {applied_music_ratio:0.3f}"))
+
+        last_ratio = applied_music_ratio
 
         last_ts = tslist[-1]
         internal_timer.sleep_atleast(cfg['timer_sleep'])
