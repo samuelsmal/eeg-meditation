@@ -1,12 +1,10 @@
 #!/bin/bash
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
-NEURODECODE_PATH="$SCRIPTPATH/../NeuroDecode"
-
-NEURODECODE_SCRIPTS="$SCRIPTPATH/neurodecode_protocols/meditation/"
+NEURODECODE_PATH="$SCRIPTPATH/../../NeuroDecode"
 
 if [ -z ${NEUROD_ROOT+x} ]; then
-  echo "NEUROD_ROOT is not set, run '. ../NeuroDecode/env.sh' first"
+  echo "NEUROD_ROOT is not set, run 'source ../..NeuroDecode/env.sh' first"
   exit 1
 fi
 
@@ -14,16 +12,22 @@ display_help() {
   echo "$(basename "$0") CLI for NFME, to be used with NeuroDecode"
   echo
   echo "-h | --help    # displays this message"
+  echo "--dvorak       # runs dvorak et al study feedback sound"
   echo
   echo
+}
+
+run_online() {
+  PYTHONPATH="$NEURODECODE_PATH" python -m feedback_protocols.online $1
 }
 
 # for more information check this
 # - https://gist.github.com/magnetikonline/22c1eb412daa350eeceee76c97519da8
 # - https://gist.github.com/cosimo/3760587
 
-opts=$(getopt o h\
-  --long help,offline,online \
+opts=$(getopt \
+  -o h \
+  --long help,dvorak \
   --name "${0##*/}" \
   -- "$@"
 )
@@ -36,13 +40,19 @@ while [[ $# -gt 0 ]]; do
       display_help
       exit
       ;;
-    --online )
+    --dvorak)
       echo
-      echo "running online"
+      echo "running dvorak et al version"
       echo
-      cd $NEURODECODE_SCRIPTS
-      PYTHONPATH="$NEURODECODE_PATH" python online.py ./sam-meditation/config_online_sam-meditation.py
-      shift
+      run_online ./protocol_configs/dvorak_study.yml
+      exit 0;
+      ;;
+    --snippet)
+      echo
+      echo "running sound snippet version"
+      echo
+      run_online ./protocol_configs/sound_snippets.yml
+      exit 0;
       ;;
     *)
       echo "No option provided. Check help"
