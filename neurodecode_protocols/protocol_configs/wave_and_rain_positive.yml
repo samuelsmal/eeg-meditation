@@ -1,3 +1,5 @@
+protocol_type: 'online'
+
 music_state_1_path: "{_root_music_path_}/snippets/waves 07.wav"
 music_state_2_path: "{_root_music_path_}/snippets/Recording of rain shower_AOS01619.wav"
 

@@ -1,4 +1,6 @@
-music_state_1_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_melody_without_script.wav"
-music_state_2_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_without_script.wav"
+protocol_type: 'online'
+
+music_state_1_path: "{_root_music_path_}/dvorak_study/script_beat_harmony_melody.wav"
+music_state_2_path: "{_root_music_path_}/dvorak_study/script_beat_harmony.wav"
 
 music_mix_style: 'REPLACING'
