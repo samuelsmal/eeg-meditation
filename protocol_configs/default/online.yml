@@ -1,7 +1,7 @@
 buffer_size: 2                     # Stream buffer [sec]
 window_size: 2                     # window length of acquired data when calling get_window [sec]
 timer_sleep: 0.6                   # in seconds
-global_time: 300
+global_time: 3
 n_jobs: 4                           # For multicore PSD processing
 
 sampling_frequency: 300

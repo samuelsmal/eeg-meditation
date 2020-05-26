@@ -12,9 +12,13 @@ import time
 import json
 import numpy as np
 import multiprocessing as mp
+from threading import Thread
+
 import pygame.mixer as pgmixer
 
 import neurodecode.utils.pycnbi_utils as pu
+
+
 
 from neurodecode import logger
 from neurodecode.utils import q_common as qc
@@ -22,6 +26,7 @@ from neurodecode.gui.streams import redirect_stdout_to_queue
 from neurodecode.stream_receiver.stream_receiver import StreamReceiver
 from neurodecode.protocols.viz_bars import BarVisual
 from neurodecode.triggers.trigger_def import trigger_def
+import neurodecode.stream_recorder.stream_recorder as recorder
 import neurodecode.triggers.pyLptControl as pyLptControl
 
 from nfme.neurodecode_protocols import utils as protocol_utils
@@ -32,51 +37,31 @@ from nfme.neurodecode_protocols.keyboard_keys import KEYS
 os.environ['OMP_NUM_THREADS'] = '1' # actually improves performance for multitaper
 mne.set_log_level('ERROR')          # DEBUG, INFO, WARNING, ERROR, or CRITICAL
 
+
 def add_to_queue(xs, x):
     xs[:-1] = xs[1:]
     xs[-1] = x
     return xs
-
 
 def apply_sigmoid(x):
     # scaling the value first to get the full range of the sigmoid fn
     return 1 / (1 + np.exp(-1. * ((x - 0.5 - 0.1) * 10.)))
 
 
-def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=False):
+def run(cfg, amp_name, amp_serial, state=mp.Value('i', 1), experiment_mode=True, baseline=False):
     """
     Online protocol for Alpha/Theta neurofeedback.
     """
-    time_of_recording = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    redirect_stdout_to_queue(logger, queue, 'INFO')
-
-    # Wait the recording to start (GUI)
-    while state.value == 2: # 0: stop, 1:start, 2:wait
-        pass
-
-    # Protocol runs if state equals to 1
-    if not state.value:
-        sys.exit(-1)
-
     #----------------------------------------------------------------------
     # LSL stream connection
     #----------------------------------------------------------------------
-    # chooose amp
-    amp_name, amp_serial = protocol_utils.find_lsl_stream(state,
-                                                          amp_name=cfg.get('amp_name', None),
-                                                          amp_serial=cfg.get('amp_serial', None))
 
-    # Connect to lsl stream
     sr = protocol_utils.connect_lsl_stream(amp_name=amp_name,
                                            amp_serial=amp_serial,
                                            window_size=cfg['window_size'],
                                            buffer_size=cfg['buffer_size'])
 
-    # Get sampling rate
     sfreq = sr.get_sample_rate()
-
-    # Get trigger channel
     trg_ch = sr.get_trigger_channel()
 
     #----------------------------------------------------------------------
@@ -104,11 +89,12 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
     pgmixer.init()
     if experiment_mode:
         # Init trigger communication
-        #tdef = trigger_def(cfg['trigger_file'])
-        #trigger = pyLptControl.Trigger(state, cfg['trigger_device'])
-        #if trigger.init(50) == False:
-        #    logger.error('\n** Error connecting to trigger device.')
-        #    raise RuntimeError
+        trigger_signals = trigger_def(cfg['trigger_file'])
+        trigger = pyLptControl.Trigger(state, cfg['trigger_device'])
+        if trigger.init(50) == False:
+            logger.error('\n** Error connecting to trigger device.')
+            raise RuntimeError
+
 
         # Preload the starting voice
         print(cfg['start_voice_file'])
@@ -132,9 +118,8 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
 
         print('recording started')
 
-        #trigger.signal(tdef.INIT)
+        trigger.signal(trigger_signals.INIT)
 
-    inc = 0
     state = 'RATIO_FEEDBACK'
 
     if not baseline:
@@ -144,12 +129,8 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
     current_max = 0
     last_ts = None
 
-    #psd_ratio = np.zeros()
-
     last_ratio = None
     measured_psd_ratios = np.full(cfg['window_size_psd_max'], np.nan)
-
-    recordings = []
 
     while global_timer.sec() < cfg['global_time']:
 
@@ -160,9 +141,6 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
         sr.acquire()
         window, tslist = sr.get_window()    # window = [samples x channels]
         window = window.T                   # window = [channels x samples]
-
-        raw_signal = window[:, -1]
-        now = datetime.datetime.now()
 
         # Check if proper real-time acquisition
         if last_ts is not None:
@@ -208,16 +186,12 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
                        sounds=(sound_1, sound_2),
                        feature_value=applied_music_ratio)
 
-            recordings += [(now, raw_signal, feature, applied_music_ratio)]
-
             print((f"{cfg['feature_type']}: {feature:0.3f}"
                    f"\t, current_music_ratio: {current_music_ratio:0.3f}"
                    f"\t, applied music ratio: {applied_music_ratio:0.3f}"
                    ))
 
             last_ratio = applied_music_ratio
-        else:
-            recordings += [(now, raw_signal)]
 
 
         last_ts = tslist[-1]
@@ -230,7 +204,7 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
 
 
     if experiment_mode:
-        #trigger.signal(tdef.END)
+        trigger.signal(trigger_signals.END)
 
         # Remove the text
         viz.fill()
@@ -245,23 +219,54 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
         # Close cv2 window
         viz.finish()
 
-    print("saving to " + cfg['online_recordings_path'].format(subject='raphael',
-                                                   protocol=cfg['protocol_name'],
-                                                   timestamp=time_of_recording))
-    with open(cfg['online_recordings_path'].format(subject='raphael',
-                                                   protocol=cfg['protocol_name'],
-                                                   timestamp=time_of_recording), 'wb') as f:
-        pickle.dump(recordings, f)
-
-
     print('done')
 
+def launching_subprocesses(*args):
+    """
+    Launch subprocesses
+
+    processesToLaunch = list of tuple containing the functions to launch
+    and their args
+    """
+    launchedProcesses = dict()
+
+    for p in args[1:]:
+        launchedProcesses[p[0]] = mp.Process(target=p[1], args=p[2])
+        launchedProcesses[p[0]].start()
+
+    # Wait that the protocol is finished to stop recording
+    launchedProcesses['protocol'].join()
+
+    try:
+        launchedProcesses['recording']
+        recordState = args[1][2][0]     #  Sharing variable
+        with recordState.get_lock():
+            recordState.value = 0
+    except:
+        pass
+
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        cfg_path = input('Config path? ')
+    if len(sys.argv) != 2:
+        raise ValueError('please provide the path for the config to load')
     else:
         cfg_path = sys.argv[1]
 
     cfg = ProtocolConfig(cfg_path)
 
-    run(cfg)
+    #  0=stop, 1=start, 2=wait
+    record_state = mp.Value('i', 2)
+    protocol_state = mp.Value('i', 1)
+    record_dir = '.'
+
+    amp_name, amp_serial = protocol_utils.find_lsl_stream(mp.Value('i', 1),
+                                                          amp_name=cfg.get('amp_name', None),
+                                                          amp_serial=cfg.get('amp_serial', None))
+
+    processesToLaunch = [('recording', recorder.run_gui, [record_state, protocol_state, record_dir,
+                                                          None, amp_name, amp_serial, False]), \
+                         ('protocol', run, [cfg, amp_name, amp_serial, protocol_state])]
+
+    launchedProcess = Thread(target=launching_subprocesses, args=processesToLaunch)
+    launchedProcess.start()
+
+    #run(cfg)

@@ -75,19 +75,6 @@ def init_feedback_sounds(path1, path2):
 
     return m1, m2
 
-    # Normal feedbacks
-    #alpha_sound = pgmixer.Sound(cfg.ALPHA_FB_PATH)
-    #theta_sound = pgmixer.Sound(cfg.THETA_FB_PATH)
-    #alpha_sound.set_volume(1.0)
-    #theta_sound.set_volume(1.0)
-
-    ## Suprethreshold feedbacks
-    #alpha_sup_sound = pgmixer.Sound(cfg.ALPHA_SUP_FB_PATH)
-    #theta_sup_sound = pgmixer.Sound(cfg.THETA_SUP_FB_PATH)
-    #alpha_sup_sound.set_volume(1.0)
-    #theta_sup_sound.set_volume(1.0)
-
-    #return alpha_sound, theta_sound, alpha_sup_sound, theta_sup_sound
 
 #----------------------------------------------------------------------
 def compute_psd(window, psde, psd_ref=None):

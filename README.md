@@ -1,7 +1,7 @@
 # NeuroFeedback for Meditation with EEG-data
 ## Semester project spring semester 2020, EPFL, MIPLAB
 
-This is the online and crude analysis package.
+This is the online and crude analysis package. A glorified interface for the NeuroDecode package.
 
 **NOTE**: Due to legal issues I will not be sharing the sounds. I know that this is a huge problem.
 Either drop me an Email or use duckduckgo to search for music and/or sounds.
@@ -90,7 +90,7 @@ See the bellow diagram for a setup of the system. The arrows indicate how the fl
 │   └── music_playground.ipynb
 ├── README.md                                          # this file
 └── utils
-    └── mp3towav.sh
+    └── mp3towav.sh                                    # small script that converts mp3 to wav files
 ```
 
 ## Setup
@@ -124,5 +124,5 @@ In order to work "out of the box" install them side-by-side in the same director
 
 ## Thanks
 
-Supervisor: Raphaël Liégeois, EPFL, MIPLAB
-Arnaud Desvachez, Gwénaël Birot from the Campus Biotech for their technical support
+- Supervisor: Raphaël Liégeois, EPFL, MIPLAB
+- Arnaud Desvachez, Gwénaël Birot from the Campus Biotech for their technical support
