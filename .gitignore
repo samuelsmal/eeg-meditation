@@ -141,3 +141,10 @@ __pycache__
 .ipynb_checkpoints
 .tox
 .DS_Store
+
+*.gif
+*.mp4
+*.pkl
+*.png
+
+/data/*

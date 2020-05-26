@@ -1,0 +1,9 @@
+_root_music_path_: '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds/'
+
+trigger_device: 'SOFTWARE'
+trigger_file: '/home/sam/proj/epfl/eeg-meditation-project/NeuroDecode/triggers/triggerdef_16.ini'
+start_voice_file: '{_root_music_path_}/arnaud/startRecordingVoice.mp3'
+end_voice_file: '{_root_music_path_}/arnaud/EndRecordingVoice.mp3'
+screen_size: [1920, 1200]
+screen_pos: [0,0]
+global_time: 0.5*60
