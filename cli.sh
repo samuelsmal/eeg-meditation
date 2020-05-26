@@ -1,12 +1,11 @@
 #!/bin/bash
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
-NEURODECODE_PATH="$SCRIPTPATH/../../NeuroDecode"
+export NEUROD_ROOT="$SCRIPTPATH/../NeuroDecode"
+export NEUROD_DATA="$SCRIPTPATH/../data/AlphaTheta"
 
-if [ -z ${NEUROD_ROOT+x} ]; then
-  echo "NEUROD_ROOT is not set, run 'source ../..NeuroDecode/env.sh' first"
-  exit 1
-fi
+PROTOCOL_CONFIG_PATH="$SCRIPTPATH/protocol_configs"
+
 
 display_help() {
   echo "$(basename "$0") CLI for NFME, to be used with NeuroDecode"
@@ -20,7 +19,7 @@ display_help() {
 }
 
 run_online() {
-  PYTHONPATH="$NEURODECODE_PATH" python -m feedback_protocols.online $1
+  python -m nfme.neurodecode_protocols.feedback_protocols.online $1
 }
 
 # for more information check this
@@ -48,21 +47,21 @@ while [[ $# -gt 0 ]]; do
       echo
       echo "running dvorak et al version"
       echo
-      run_online ./protocol_configs/dvorak_study.yml
+      run_online "$PROTOCOL_CONFIG_PATH/dvorak_study.yml"
       exit 0;
       ;;
     --wave-rain-pos)
       echo
       echo "running sound snippet version"
       echo
-      run_online ./protocol_configs/wave_and_rain_positive.yml
+      run_online "$PROTOCOL_CONFIG_PATH/wave_and_rain_positive.yml"
       exit 0;
       ;;
     --wave-rain-neg)
       echo
       echo "running sound snippet version"
       echo
-      run_online ./protocol_configs/wave_and_rain_negative.yml
+      run_online "$PROTOCOL_CONFIG_PATH/wave_and_rain_negative.yml"
       exit 0;
       ;;
     *)

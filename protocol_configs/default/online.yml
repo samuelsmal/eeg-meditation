@@ -14,8 +14,8 @@ online_recordings_path: '{_root_data_path_}/{{subject}}_{{protocol}}_{{timestamp
 trigger_device: 'SOFTWARE'
 trigger_file: '/home/sam/proj/epfl/eeg-meditation-project/NeuroDecode/triggers/triggerdef_16.ini'
 
-start_voice_file: '{_root_music_path_}/arnaud/startRecordingVoice.mp3'
-end_voice_file: '{_root_music_path_}/arnaud/EndRecordingVoice.mp3'
+start_voice_file: '{_root_music_path_}/arnaud/startRecordingVoice.wav'
+end_voice_file: '{_root_music_path_}/arnaud/EndRecordingVoice.wav'
 screen_size: [1920, 1200]
 screen_pos: [0,0]
 

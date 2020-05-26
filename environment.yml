@@ -188,15 +188,27 @@ dependencies:
   - zeromq=4.3.1=he6710b0_3
   - zlib=1.2.11=h7b6447c_3
   - pip:
+    - colorama==0.4.3
+    - configparser==5.0.0
     - dill==0.2.7.1
     - future==0.18.2
+    - h5py==2.10.0
     - imageio-ffmpeg==0.4.1
     - mne==0.20.0
+    - neurodecode==0.9.dev0
+    - opencv-python==4.2.0.34
+    - psutil==5.7.0
     - pyfunctional==1.3.0
+    - pylsl==1.12.2
     - pyqt5==5.12.3
     - pyqt5-sip==4.19.18
+    - pyqtgraph==0.10.0
     - pyqtwebengine==5.12.1
+    - pyserial==3.4
+    - pyxdf==1.16.2
+    - simplejson==3.17.0
     - soundfile==0.10.2
     - tabulate==0.8.6
+    - xgboost==1.1.0
 prefix: /home/sam/.local/opt/miniconda3/envs/nfme
 

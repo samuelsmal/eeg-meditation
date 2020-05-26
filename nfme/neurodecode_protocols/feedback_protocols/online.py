@@ -24,10 +24,10 @@ from neurodecode.protocols.viz_bars import BarVisual
 from neurodecode.triggers.trigger_def import trigger_def
 import neurodecode.triggers.pyLptControl as pyLptControl
 
-from lib import utils as protocol_utils
-from lib.config import ProtocolConfig, FeatureType
-from lib.music import mix_sounds
-from lib.keyboard_keys import KEYS
+from nfme.neurodecode_protocols import utils as protocol_utils
+from nfme.utils.protocol_config import ProtocolConfig, FeatureType
+from nfme.neurodecode_protocols.music import mix_sounds, MusicMixStyle
+from nfme.neurodecode_protocols.keyboard_keys import KEYS
 
 os.environ['OMP_NUM_THREADS'] = '1' # actually improves performance for multitaper
 mne.set_log_level('ERROR')          # DEBUG, INFO, WARNING, ERROR, or CRITICAL
@@ -101,6 +101,7 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
     global_timer   = qc.Timer(autoreset=False)
     internal_timer = qc.Timer(autoreset=True)
 
+    pgmixer.init()
     if experiment_mode:
         # Init trigger communication
         #tdef = trigger_def(cfg['trigger_file'])
@@ -110,7 +111,7 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=
         #    raise RuntimeError
 
         # Preload the starting voice
-        pgmixer.init()
+        print(cfg['start_voice_file'])
         pgmixer.music.load(cfg['start_voice_file'])
 
         # Init feedback

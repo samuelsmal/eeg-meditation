@@ -49,32 +49,48 @@ See the bellow diagram for a setup of the system. The arrows indicate how the fl
 
 ```
 .
-├── data                                          # example of the data structure
-│   ├── AlphaTheta
-│   │   └── subject-AlphaTheta                    # for every subject a folder
-│   │       ├── online
-│   │       └── offline
-│   │           ├── 20200304-144100-eve.txt
-│   │           ├── 20200304-144100-raw.pcl
-│   │           └── fif
-│   │               ├── 20200304-144100-raw.fif
-│   │               └── channelsList.txt
-│   └── bandpowers
-├── environment.yml                               # use this to set up the environment
+├── cli.sh                                             # CLI to run this, see below for more information
+├── data                                               # Copy of data, used for the analysation part
+│   ├── AlphaTheta                                     # Example for raw data, collected using NeuroDecode directly
+│   └── features                                       # Features computed by this package (offline)
+│       └── bandpowers
+├── env                                                # helper executable to activate the enviroment
+├── environment.yml                                    # Environment file, use this to install the environment
+├── meditation_sounds                                  # Music and sounds
 ├── nfme
-│   ├── config.py                                 # config file
-│   ├── features                                  # everything that has to do with features
-│   │   ├── bandpower.py
-│   │   └── preprocessing.py                      # filtering etc.
-│   └── utils                                     # utils in general
+│   ├── config.py                                      # config package, not the actual values
+│   ├── features
+│   ├── neurodecode_protocols
+│   │   ├── feedback_protocols
+│   │   │   ├── offline.py
+│   │   │   ├── online.py
+│   │   │   └── trainer.py
+│   │   ├── lib
+│   │   │   ├── config.py
+│   │   │   ├── keyboard_keys.py
+│   │   │   ├── music.py
+│   │   │   └── utils.py
+│   │   └── protocol_configs
+│   │       ├── default
+│   │       │   ├── offline.yml
+│   │       │   └── online.yml
+│   │       ├── dvorak_study.yml
+│   │       ├── wave_and_rain_negative.yml
+│   │       └── wave_and_rain_positive.yml
+│   └── utils
 │       ├── data_loading.py
+│       ├── jupyter.py
 │       ├── plots.py
 │       └── video.py
-├── notebooks                                     # development and main runfiles
-│                                                 # you'll find a *.py version of each notebook as
-│                                                 # well this is just a copy, making it easier to
-│                                                 # track changes and import into other notebooks
-└── README.md                                     # this file
+├── notebooks
+│   ├── archive                                        # can safely be ignored
+│   ├── dvorak_music.ipynb
+│   ├── main.ipynb                                     # check this out to see the main analysis,
+│   │                                                  #  graph and video creation
+│   └── music_playground.ipynb
+├── README.md                                          # this file
+└── utils
+    └── mp3towav.sh
 ```
 
 ## Setup

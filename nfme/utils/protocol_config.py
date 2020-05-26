@@ -2,7 +2,7 @@ import yaml
 import os.path as path
 from enum import Enum
 
-from lib.music import MusicMixStyle
+from nfme.neurodecode_protocols.music import MusicMixStyle
 
 class FeatureType(Enum):
     THETA = 1
@@ -16,8 +16,9 @@ class ProtocolConfig(dict):
         with open(file_path, 'r') as f:
             dct = yaml.safe_load(f)
 
-        defaults_file_path = defaults_file_path or path.abspath(path.join(path.dirname(__file__),
-                                                                          f"../protocol_configs/default/{dct['protocol_type']}.yml"))
+        defaults_file_path = defaults_file_path or \
+            path.abspath(path.join(path.dirname(__file__),
+                                   f"../../protocol_configs/default/{dct['protocol_type']}.yml"))
 
         with open(defaults_file_path, 'r') as f:
             self.update(yaml.safe_load(f))
