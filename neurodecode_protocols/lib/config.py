@@ -1,7 +1,13 @@
 import yaml
 import os.path as path
+from enum import Enum
 
 from lib.music import MusicMixStyle
+
+class FeatureType(Enum):
+    THETA = 1
+    ALPHA_THETA = 2
+
 
 class ProtocolConfig(dict):
     def __init__(self, file_path, defaults_file_path=None):
@@ -22,8 +28,13 @@ class ProtocolConfig(dict):
             if isinstance(v, str) and '_root_music_path_' in v:
                 self[k] = v.format(**{'_root_music_path_': self['_root_music_path_']})
 
-        self['music_mix_style'] = MusicMixStyle[self['music_mix_style']]
+            if isinstance(v, str) and '_root_data_path_' in v:
+                self[k] = v.format(**{'_root_data_path_': self['_root_data_path_']})
 
+        self['music_mix_style'] = MusicMixStyle[self['music_mix_style']]
+        self['feature_type'] = FeatureType[self['feature_type']]
+
+        self['protocol_name'] = file_path.split('/')[-1].split('.')[0]
 
     def __getitem__(self, key):
         return dict.__getitem__(self, key)

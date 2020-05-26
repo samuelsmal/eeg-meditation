@@ -36,6 +36,8 @@ opts=$(getopt \
 
 eval set -- "$opts"
 
+silent=true
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h | --help )

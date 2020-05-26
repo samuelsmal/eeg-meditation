@@ -25,7 +25,7 @@ from neurodecode.triggers.trigger_def import trigger_def
 import neurodecode.triggers.pyLptControl as pyLptControl
 
 from lib import utils as protocol_utils
-from lib.config import ProtocolConfig
+from lib.config import ProtocolConfig, FeatureType
 from lib.music import mix_sounds
 from lib.keyboard_keys import KEYS
 
@@ -38,7 +38,12 @@ def add_to_queue(xs, x):
     return xs
 
 
-def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True):
+def apply_sigmoid(x):
+    # scaling the value first to get the full range of the sigmoid fn
+    return 1 / (1 + np.exp(-1. * ((x - 0.5 - 0.1) * 10.)))
+
+
+def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True, baseline=False):
     """
     Online protocol for Alpha/Theta neurofeedback.
     """
@@ -117,18 +122,23 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True):
         viz.put_text('Close your eyes and relax')
         viz.update()
 
+        pgmixer.music.play()
+
         # Wait a key press
         key = 0xFF & cv2.waitKey(0)
         if key == KEYS['esc'] or not state.value:
             sys.exit(-1)
+
+        print('recording started')
 
         #trigger.signal(tdef.INIT)
 
     inc = 0
     state = 'RATIO_FEEDBACK'
 
-    sound_1.play()
-    sound_2.play()
+    if not baseline:
+        sound_1.play(loops=-1)
+        sound_2.play(loops=-1)
 
     current_max = 0
     last_ts = None
@@ -151,6 +161,7 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True):
         window = window.T                   # window = [channels x samples]
 
         raw_signal = window[:, -1]
+        now = datetime.datetime.now()
 
         # Check if proper real-time acquisition
         if last_ts is not None:
@@ -171,39 +182,50 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True):
         # Computing the Power Spectrum Densities using multitapers
         #----------------------------------------------------------------------
         # PSD
-        #psd_alpha = protocol_utils.compute_psd(window, psde_alpha)
-        psd_theta = protocol_utils.compute_psd(window, psde_theta)
+        if not baseline:
+            if cfg['feature_type'] == FeatureType.THETA:
+                psd_theta = protocol_utils.compute_psd(window, psde_theta)
 
-        # Ratio Alpha / Theta
-        #psd_ratio = psd_alpha / psd_theta
-        psd_ratio = psd_theta
+                feature = psd_theta
+            elif cfg['feature_type'] == FeatureType.ALPHA_THETA:
+                psd_alpha = protocol_utils.compute_psd(window, psde_alpha)
+                psd_theta = protocol_utils.compute_psd(window, psde_theta)
 
-        measured_psd_ratios = add_to_queue(measured_psd_ratios, psd_ratio)
+                feature = psd_alpha / psd_theta
 
-        current_music_ratio  = psd_ratio / np.max(measured_psd_ratios[~np.isnan(measured_psd_ratios)])
+            measured_psd_ratios = add_to_queue(measured_psd_ratios, feature)
+            current_music_ratio  = feature / np.max(measured_psd_ratios[~np.isnan(measured_psd_ratios)])
 
-        if last_ratio is not None:
-            applied_music_ratio = last_ratio + (current_music_ratio - last_ratio) * 0.1
+            #current_music_ratio  = feature / np.max(measured_psd_ratios)
+
+            if last_ratio is not None:
+                applied_music_ratio = last_ratio + (current_music_ratio - last_ratio) * 0.25
+            else:
+                applied_music_ratio = current_music_ratio
+
+            mix_sounds(style=cfg['music_mix_style'],
+                       sounds=(sound_1, sound_2),
+                       feature_value=applied_music_ratio)
+
+            recordings += [(now, raw_signal, feature, applied_music_ratio)]
+
+            print((f"{cfg['feature_type']}: {feature:0.3f}"
+                   f"\t, current_music_ratio: {current_music_ratio:0.3f}"
+                   f"\t, applied music ratio: {applied_music_ratio:0.3f}"
+                   ))
+
+            last_ratio = applied_music_ratio
         else:
-            applied_music_ratio = current_music_ratio
+            recordings += [(now, raw_signal)]
 
-        mix_sounds(style=cfg['music_mix_style'],
-                   sounds=(sound_1, sound_2),
-                   feature_value=applied_music_ratio)
-
-        recordings += [(raw_signal, psd_ratio, applied_music_ratio)]
-
-        print((f"Ratio Alpha/Theta: {psd_ratio:0.3f}"
-               f", current_music_ratio: {current_music_ratio:0.3f}"
-               f", applied music ratio: {applied_music_ratio:0.3f}"))
-
-        last_ratio = applied_music_ratio
 
         last_ts = tslist[-1]
         internal_timer.sleep_atleast(cfg['timer_sleep'])
 
-    sound_1.set_volume(0)
-    sound_2.set_volume(0)
+
+    if not baseline:
+        sound_1.fadeout(3)
+        sound_2.fadeout(3)
 
 
     if experiment_mode:
@@ -222,9 +244,16 @@ def run(cfg, state=mp.Value('i', 1), queue=None, experiment_mode=True):
         # Close cv2 window
         viz.finish()
 
-    with open(f"./online_recording_{time_of_recording}.pkl", 'wb') as f:
+    print("saving to " + cfg['online_recordings_path'].format(subject='raphael',
+                                                   protocol=cfg['protocol_name'],
+                                                   timestamp=time_of_recording))
+    with open(cfg['online_recordings_path'].format(subject='raphael',
+                                                   protocol=cfg['protocol_name'],
+                                                   timestamp=time_of_recording), 'wb') as f:
         pickle.dump(recordings, f)
 
+
+    print('done')
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

@@ -7,6 +7,9 @@ n_jobs: 4                           # For multicore PSD processing
 sampling_frequency: 300
 
 _root_music_path_: '/home/sam/proj/epfl/eeg-meditation-project/nfme/meditation_sounds'
+_root_data_path_: '/home/sam/proj/epfl/eeg-meditation-project/data/online_protocol'
+
+online_recordings_path: '{_root_data_path_}/{{subject}}_{{protocol}}_{{timestamp}}.pkl'
 
 trigger_device: 'SOFTWARE'
 trigger_file: '/home/sam/proj/epfl/eeg-meditation-project/NeuroDecode/triggers/triggerdef_16.ini'
@@ -28,3 +31,5 @@ theta_band_freq:
   max: 8
 
 window_size_psd_max: 5 # note that this is roughly * timer_sleep seconds
+
+feature_type: 'THETA'
