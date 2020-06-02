@@ -7,7 +7,7 @@ from src.configuration import cfg
 from src import helpers
 
 
-def plot_bandpower_bar(bp, bands_to_plot=cfg["bands"].keys(), title=""):
+def plot_bandpower_bar(bp, bands_to_plot=cfg["bands"].keys(), title="Bars"):
     mean_bp = bp.mean(level=1, axis=0)
     print(mean_bp)
     bands_to_plot_filter = mean_bp.index.get_level_values(0).isin(bands_to_plot)
@@ -40,6 +40,17 @@ def plot_bandpower_bar_std_concurrent(
 
 
 def plot_bandpower_line(bp, title=""):
+    """
+    WARNING: x-axis is time, which is not robust
+    Parameters
+    ----------
+    bp: pd.DataFrame
+    title: str
+
+    Returns
+    -------
+
+    """
     bp.plot()
 
     plt.ylabel("Mean spectral power (µV²/Hz)")

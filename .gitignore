@@ -1,6 +1,8 @@
 # Project
 analysis-adelie/TODO.md
 analysis-adelie/*.pkl
+analysis-adelie/*.csv
+analysis-adelie/*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

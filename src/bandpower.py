@@ -83,8 +83,6 @@ def bandpower(data, sf, band, method="welch", window_sec=None, relative=False):
 def get_bandpower_for_electrode(signal_data, electrode, config, window_sec=2):
     """Calculates the bandpower for the given electrode
 
-    Note that this will take some time... I suggest that you only use a part of the signal to try it out.
-
     Parameters
     ----------
     signal_data: 2d pandas dataframe
@@ -115,8 +113,6 @@ def get_bandpower_epochs_for_all_electrodes(
     signal_data, config, epoch_size="10s", window_sec=2
 ):
     """Calculates the bandpower for the given electrode for different epochs
-
-    Note that this will take some time... I suggest that you only use a part of the signal to try it out.
 
     Parameters
     ----------
@@ -157,12 +153,12 @@ def get_bandpower_epochs_for_all_electrodes(
     return result
 
 
-def get_all_electrodes_bandpowers(df, electrodes, config=cfg, window_size="2s"):
+def get_all_electrodes_bandpowers(df, electrodes, config=cfg, window_sec=2):
     start = time.time()
     all_bandpowers = {}
     for electrode in electrodes:
         all_bandpowers[electrode] = get_bandpower_for_electrode(
-            df, electrode=electrode, config=config, window_size=window_size
+            df, electrode=electrode, config=config, window_sec=window_sec
         )
 
     end = time.time()
@@ -170,13 +166,16 @@ def get_all_electrodes_bandpowers(df, electrodes, config=cfg, window_size="2s"):
     return all_bandpowers
 
 
-def get_all_electrodes_bandpowers_df(df, electrodes, config=cfg, window_size="2s"):
+def get_all_electrodes_bandpowers_df(df, electrodes, config=cfg, window_sec=2):
     all_bandpowers_dict = get_all_electrodes_bandpowers(
-        df, electrodes, config, window_size=window_size
+        df, electrodes, config, window_sec=window_sec
     )
     result_df = pd.DataFrame(
         index=pd.MultiIndex.from_product(
-            [electrodes, all_bandpowers_dict["P3"].keys()],
+            [
+                electrodes,
+                all_bandpowers_dict[list(all_bandpowers_dict.keys())[0]].keys(),
+            ],
             names=["electrodes", "bands/ratios"],
         ),
         columns=["values"],

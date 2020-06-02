@@ -8,6 +8,7 @@ from scipy import signal
 # project
 from src.configuration import get_config_value, cfg
 from src import bandpower as bp
+from src import statistics as stats
 
 
 def load_signal_data(data_type, config, subject="sam", recording=0):
@@ -137,6 +138,19 @@ def preprocessing(series, center=True, reduce=True, detrend=True):
 def load_bandpower_all_epochs_all_recordings_df(
     data_type, subject="adelie", config=cfg, **kwargs
 ):
+    """
+
+    Parameters
+    ----------
+    data_type: baseline ou meditation (str)
+    subject
+    config
+    kwargs
+
+    Returns
+    -------
+
+    """
     dfs = [
         load_signal_data(data_type, subject=subject, recording=recording, config=config)
         for recording in range(
@@ -151,3 +165,37 @@ def load_bandpower_all_epochs_all_recordings_df(
     return bp.get_bandpower_epochs_for_all_electrodes(
         concatenated, config=cfg, **kwargs
     )
+
+
+def get_concat_signal(data_type, subject="adelie", config=cfg):
+    dfs = [
+        helpers.load_signal_data(
+            data_type, subject=subject, recording=recording, config=config
+        )
+        for recording in range(
+            len(config["paths"]["subjects"][subject]["recordings"][data_type])
+        )
+    ]
+
+    for i in range(len(dfs) - 1):
+        dfs[i + 1].index += dfs[i].index.max()
+
+    concatenated = pd.concat(dfs)
+    return concatenated
+
+
+def get_concat_bandpower(data_type, subject="adelie", config=cfg):
+    dfs = [
+        helpers.load_bandpower_all_epochs_df(
+            data_type, subject=subject, recording=recording, config=config
+        )
+        for recording in range(
+            len(config["paths"]["subjects"][subject]["recordings"][data_type])
+        )
+    ]
+
+    for i in range(len(dfs) - 1):
+        dfs[i + 1].index += dfs[i].index.max()
+
+    concatenated = pd.concat(dfs)
+    return concatenated
