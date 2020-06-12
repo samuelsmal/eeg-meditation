@@ -64,7 +64,7 @@ cfg = {
                 },
                 "channels_path": "channelsList.txt",
             },
-            "arnaud": {
+            "arn": {
                 "prefix": "/recording_2020-05-29",
                 "recordings": {
                     "baseline": ["arn-baseline"],
@@ -106,6 +106,13 @@ cfg_mr = {
                 "recordings": {
                     "baseline": ["baseline1", "baseline2"],
                     "meditation": ["meditation"],
+                },
+            },
+            "mr2": {
+                "prefix": "/MatthieuRicard",
+                "recordings": {
+                    "baseline": ["baseline1.2", "baseline2.2"],
+                    "meditation": ["meditation.2"],
                 },
             },
         },

@@ -27,7 +27,12 @@ def load_signal_data(data_type, config, subject="sam", recording=0):
     -------
     a pandas dataframe, timedeltaindexed of the raw signals
     """
+
     subject_paths = get_config_value(config, "paths", "subjects", subject)
+    if subject == "mr":
+        return pd.read_pickle(
+            f"{config['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[recording]}-raw.pcl"
+        )
     data = pd.read_pickle(
         f"{config['paths']['base']}/{subject_paths['prefix']}/offline/{get_config_value(subject_paths, 'recordings', data_type)[recording]}-raw.pcl"
     )
@@ -151,12 +156,14 @@ def load_bandpower_all_epochs_all_recordings_df(
     -------
 
     """
-    dfs = [
-        load_signal_data(data_type, subject=subject, recording=recording, config=config)
-        for recording in range(
-            len(config["paths"]["subjects"][subject]["recordings"][data_type])
+    dfs = []
+    for recording in range(
+        len(config["paths"]["subjects"][subject]["recordings"][data_type])
+    ):
+        df = load_signal_data(
+            data_type, subject=subject, recording=recording, config=config
         )
-    ]
+        dfs.append(df)
 
     for i in range(len(dfs) - 1):
         dfs[i + 1].index += dfs[i].index.max()

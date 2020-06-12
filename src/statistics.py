@@ -83,11 +83,9 @@ def get_dsp_welch(
         )
     )
 
-    return (
-        dsp.drop(columns=0)
-        .groupby(level=0)
-        .filter(lambda g: g.isnull().sum().sum() == 0)
-    )
+    if 0 in dsp:
+        dsp = dsp.drop(columns=0)
+    return dsp.groupby(level=0).filter(lambda g: g.isnull().sum().sum() == 0)
 
 
 def get_slopes(raw_signal_df, with_welch=True):
@@ -99,7 +97,7 @@ def get_slopes(raw_signal_df, with_welch=True):
         dsp_db_pos = get_dsp_db(raw_signal_df, only_positive=True)
     slopes_df = dsp_db_pos.groupby(level=0).apply(
         lambda x: x.agg(
-            lambda y: np.polyfit(x.index.get_level_values(1).astype(float), 1 / y, 1)[1]
+            lambda y: np.polyfit(x.index.get_level_values(1).astype(float), 1 / y, 1)[0]
         )
     )
     return slopes_df

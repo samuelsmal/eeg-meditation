@@ -137,6 +137,7 @@ def get_bandpower_epochs_for_all_electrodes(
         ).aggregate(
             lambda epoch: bandpower(
                 helpers.preprocessing(epoch),
+                # epoch,
                 config["sampling_frequency"],
                 band_range,
                 window_sec=window_sec,
@@ -145,6 +146,55 @@ def get_bandpower_epochs_for_all_electrodes(
 
     # compute all different ratios
     for bn_l, bn_r in combinations(config["bands"].keys(), 2):
+        bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
+
+    result = pd.concat(list(bandpowers.values()), keys=list(bandpowers.keys()))
+    for column in result.columns:
+        result[column] = result[column].astype(float)
+    return result
+
+
+def get_bandpower_epochs_for_all_electrodes_v2(
+    signal_data,
+    sampling_frequency,
+    bands,
+    epoch_size="10s",
+    window_sec=2,
+    apply_preprocessing=False,
+    target_level=None,
+):
+    """Calculates the bandpower for the given electrode for different epochs
+
+    Parameters
+    ----------
+    signal_data: pd.DataFrame
+        raw signal data, indexed by a timedeltaindex (or any other time-based index)
+    electrode: string
+        name of the electrode of interest
+    config: dict
+        dict of config parameters
+    window_size: string
+        size of rolling window
+
+    Returns
+    -------
+    a new pandas dataframe of the bandpowers, in addition all ration combinations are listed as well
+    """
+
+    bandpowers = {}
+    groups = [pd.Grouper(level=0), pd.Grouper(freq=epoch_size, level=target_level)]
+    for band_name, band_range in bands.items():
+        bandpowers[band_name] = signal_data.groupby(groups).aggregate(
+            lambda epoch: bandpower(
+                helpers.preprocessing(epoch) if apply_preprocessing else epoch,
+                sampling_frequency,
+                band_range,
+                window_sec=window_sec,
+            )
+        )
+
+    # compute all different ratios
+    for bn_l, bn_r in combinations(bands.keys(), 2):
         bandpowers[f"{bn_l} / {bn_r}"] = bandpowers[bn_l] / bandpowers[bn_r]
 
     result = pd.concat(list(bandpowers.values()), keys=list(bandpowers.keys()))
